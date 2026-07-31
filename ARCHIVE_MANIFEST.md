@@ -17,6 +17,7 @@
 - `docs/`：MailHub ADR、用户/开发/运维文档、兼容性说明和历史待办。
 - `scripts/`：历史 MailHub 验证入口。
 - `integration-reference/repository-snapshots/`：来源提交中的宿主共享文件快照，仅供以后重建集成差异时参考，不应直接覆盖当前 CAPlatform 文件。
+- `source-archives/`：从来源提交直接导出的原始 ZIP，作为文件级恢复副本保留。
 
 ## 边界
 
