@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mailhub.invalid/schemas/events/mailhub.provider_event.v1.json",
+  "title": "MailHub provider webhook receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_type", "provider", "event_id", "tenant_id", "body_sha256", "received_at", "verified", "duplicate", "status", "trace_id"],
+  "properties": {
+    "schema_version": {"const": "mailhub.provider_event.v1"},
+    "event_type": {"const": "mailhub.provider_event.v1"},
+    "provider": {"type": "string", "minLength": 1},
+    "event_id": {"type": "string", "minLength": 1},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "body_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "received_at": {"type": "string", "format": "date-time"},
+    "verified": {"type": "boolean"},
+    "duplicate": {"type": "boolean"},
+    "status": {"enum": ["accepted", "duplicate", "quarantined"]},
+    "trace_id": {"type": "string", "minLength": 1}
+  }
+}

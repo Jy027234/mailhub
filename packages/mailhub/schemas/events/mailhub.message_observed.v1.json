@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mailhub.invalid/schemas/events/mailhub.message_observed.v1.json",
+  "title": "MailHub observed message event v1",
+  "allOf": [
+    {"$ref": "mailhub.event_envelope.v1.json"},
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {"const": "mailhub.message_observed.v1"},
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["message_id", "connection_id", "thread_id", "provider_message_ref", "content_sha256"],
+          "properties": {
+            "message_id": {"type": "string", "format": "uuid"},
+            "connection_id": {"type": "string", "format": "uuid"},
+            "thread_id": {"type": "string", "format": "uuid"},
+            "provider_message_ref": {"type": "string", "minLength": 1},
+            "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "body_object_ref": {"type": ["string", "null"]},
+            "source_locator": {"type": "array", "items": {"type": "object"}}
+          }
+        }
+      }
+    }
+  ]
+}

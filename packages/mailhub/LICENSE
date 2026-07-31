@@ -1,0 +1,16 @@
+CAPlatform Proprietary License Notice
+
+Copyright (c) 2026 CAPlatform contributors. All rights reserved.
+
+This MailHub package and its contents are proprietary. No permission is granted
+to use, copy, modify, distribute, sublicense, or create derivative works except
+under a separate written agreement authorized by the repository owner.
+
+The software is provided without warranty of any kind. Aviation analysis,
+opportunity assessment, and valuation outputs are controlled pilot artifacts
+and must not be treated as authoritative approvals, certifications, releases,
+or transaction decisions.
+
+This file is the package-level copy of the repository-root license notice. The
+repository-root LICENSE remains the governing license for the complete source
+tree; NOTICE and source-ledger.yaml are required release companions.

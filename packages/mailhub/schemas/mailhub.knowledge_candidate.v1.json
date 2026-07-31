@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mailhub.invalid/schemas/mailhub.knowledge_candidate.v1.json",
+  "title": "MailHub knowledge candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "message_id", "content_sha256", "payload", "evidence", "review_revision"],
+  "properties": {
+    "candidate_id": {"type": "string", "format": "uuid"},
+    "message_id": {"type": "string", "format": "uuid"},
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "payload": {"type": "object"},
+    "evidence": {"type": "array", "items": {"type": "object"}},
+    "review_revision": {"type": "integer", "minimum": 1}
+  }
+}

@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16.4
+    profiles: [sandbox]
+    environment:
+      POSTGRES_DB: mailhub
+      POSTGRES_USER: mailhub
+      POSTGRES_PASSWORD: local-only-not-production
+    ports: ["5433:5432"]
+    volumes: [mailhub-postgres:/var/lib/postgresql/data]
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    profiles: [sandbox]
+    environment:
+      MAILHUB_ENV: development
+      MAILHUB_ALLOW_SANDBOX: "true"
+      MAILHUB_OUTBOUND_ENABLED: "false"
+      MAILHUB_JOB_LEASE_SECONDS: "300"
+      MAILHUB_GMAIL_ENABLED: "false"
+      MAILHUB_MICROSOFT_GRAPH_ENABLED: "false"
+    ports: ["8000:8000"]
+    depends_on: [postgres]
+
+volumes:
+  mailhub-postgres:

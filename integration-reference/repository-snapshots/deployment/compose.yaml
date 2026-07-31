@@ -1,0 +1,516 @@
+name: caplatform-pilot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: zhiziagent_platform
+      POSTGRES_USER: zhiziagent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - platform_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zhiziagent -d zhiziagent_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [caplatform]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [caplatform]
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks: [caplatform]
+
+  parsecore-api:
+    build:
+      context: ${PARSECORE_CONTEXT:-../../JXZTtool}
+      dockerfile: Dockerfile
+      args:
+        TENCENT_MIRROR_HOST: ${TENCENT_MIRROR_HOST:-mirrors.tencentyun.com}
+    image: ${PARSECORE_IMAGE:-zhiziagent-parsecore:caplatform-pilot}
+    restart: unless-stopped
+    environment:
+      PARSECORE_RUNTIME_CONFIG: /app/parsecore.runtime.toml
+      PARSECORE_API_KEY: ${PARSECORE_API_KEY:?set the internal ParseCore API key}
+      PARSECORE_UPLOAD_BRIDGE_API_KEY: ${PARSECORE_UPLOAD_BRIDGE_API_KEY:?set the internal ParseCore upload bridge API key}
+    command:
+      [
+        "python",
+        "-m",
+        "parsecore.cli",
+        "serve",
+        "--config",
+        "/app/parsecore.runtime.toml",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8090",
+      ]
+    volumes:
+      - parsecore_state:/app/var
+      - type: bind
+        source: ${PARSECORE_CONTEXT:-../../JXZTtool}/parsecore.zhiziagent.toml
+        target: /app/parsecore.runtime.toml
+        read_only: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 30s
+    networks:
+      caplatform:
+        aliases: [parsecore-api]
+
+  parsecore-worker:
+    build:
+      context: ${PARSECORE_CONTEXT:-../../JXZTtool}
+      dockerfile: Dockerfile
+      args:
+        TENCENT_MIRROR_HOST: ${TENCENT_MIRROR_HOST:-mirrors.tencentyun.com}
+    image: ${PARSECORE_IMAGE:-zhiziagent-parsecore:caplatform-pilot}
+    restart: unless-stopped
+    environment:
+      PARSECORE_RUNTIME_CONFIG: /app/parsecore.runtime.toml
+      PARSECORE_API_KEY: ${PARSECORE_API_KEY:?set the internal ParseCore API key}
+      PARSECORE_UPLOAD_BRIDGE_API_KEY: ${PARSECORE_UPLOAD_BRIDGE_API_KEY:?set the internal ParseCore upload bridge API key}
+    command:
+      [
+        "python",
+        "-m",
+        "parsecore.cli",
+        "worker",
+        "--config",
+        "/app/parsecore.runtime.toml",
+      ]
+    volumes:
+      - parsecore_state:/app/var
+      - type: bind
+        source: ${PARSECORE_CONTEXT:-../../JXZTtool}/parsecore.zhiziagent.toml
+        target: /app/parsecore.runtime.toml
+        read_only: true
+    depends_on:
+      parsecore-api:
+        condition: service_healthy
+    networks: [caplatform]
+
+  agentctl:
+    build:
+      context: ${AGENTCTL_CONTEXT:-../../Agent}
+      dockerfile: Dockerfile
+      args:
+        VCS_REF: ${AGENTCTL_VCS_REF:-unknown}
+    image: ${AGENTCTL_IMAGE:-agentctl:caplatform-pilot}
+    restart: unless-stopped
+    depends_on:
+      lite-valuation-toolhost:
+        condition: service_healthy
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - >-
+        agentctl integration apply
+        --manifest /caplatform/deployment/agentctl.capabilities.yaml
+        --config /caplatform/deployment/runtime.config.docker.yaml --json &&
+        exec agentctl serve
+        --config /caplatform/deployment/runtime.config.docker.yaml
+        --agent-dir /app/.agentctl/agents
+        --host 0.0.0.0 --port 8080
+        --token "$${AGENTCTL_MASTER_TOKEN}"
+    environment:
+      AGENTCTL_ENV: pilot
+      PYTHONPATH: /caplatform/deployment
+      AIPROJECTOPS_BASE_URL: http://aiprojectops:8000
+      AIPROJECTOPS_PLATFORM_SERVICE_TOKEN: ${AIPROJECTOPS_PLATFORM_SERVICE_TOKEN:-}
+      AIPROJECTOPS_WRITE_TIMEOUT_SECONDS: ${AIPROJECTOPS_WRITE_TIMEOUT_SECONDS:-8}
+      PLATFORM_CORE_BASE_URL: http://platform-core:8000
+      PLATFORM_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN:?set PLATFORM_SERVICE_TOKEN}
+      CAPLATFORM_TENANT_ID: ${CAPLATFORM_TENANT_ID:?set CAPLATFORM_TENANT_ID after onboarding}
+      AGENTCTL_PLATFORM_INSTRUCTION_SKILLS_TOKEN: ${AGENTCTL_PLATFORM_INSTRUCTION_SKILLS_TOKEN:?set dedicated Agentctl Instruction Skill token}
+      AGENTCTL_PLATFORM_TOOL_BINDINGS_TOKEN: ${AGENTCTL_PLATFORM_TOOL_BINDINGS_TOKEN:?set dedicated Agentctl ToolBinding token}
+      AGENTCTL_MASTER_TOKEN: ${ZAP_AGENTCTL_ADMIN_TOKEN:?set the shared Core-to-Agentctl master token}
+      AGENTCTL_PLATFORM_CONTEXT_HMAC_KEY: ${ZAP_PLATFORM_TOOL_CONTEXT_SECRET:?set ZAP_PLATFORM_TOOL_CONTEXT_SECRET}
+      CAPLATFORM_LITE_VALUATION_HANDLER_TOKEN: ${CAPLATFORM_LITE_VALUATION_HANDLER_TOKEN:?set Lite valuation handler token}
+      CAPLATFORM_MODEL_API_KEY: ${CAPLATFORM_MODEL_API_KEY:?provision the governed model provider credential}
+      CAPLATFORM_MODEL_BASE_URL: ${CAPLATFORM_MODEL_BASE_URL:?provision the governed model provider base URL}
+    volumes:
+      - ..:/caplatform:ro
+      - agentctl_state:/app/.agentctl
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os, urllib.request; request=urllib.request.Request('http://127.0.0.1:8080/healthz', headers={'Authorization': 'Bearer ' + os.environ['AGENTCTL_MASTER_TOKEN']}); urllib.request.urlopen(request, timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [caplatform]
+
+  lite-valuation-toolhost:
+    build:
+      context: ..
+      dockerfile: deployment/lite_valuation_toolhost/Dockerfile
+      args:
+        VCS_REF: ${CAPLATFORM_VCS_REF:-unknown}
+    image: ${LITE_VALUATION_TOOLHOST_IMAGE:-caplatform-lite-valuation-toolhost:local}
+    restart: unless-stopped
+    environment:
+      CAPLATFORM_LITE_VALUATION_HANDLER_TOKEN: ${CAPLATFORM_LITE_VALUATION_HANDLER_TOKEN:?set Lite valuation handler token}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8790/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [caplatform]
+
+  platform-core:
+    build:
+      context: ${PLATFORM_CORE_CONTEXT:-../../zhiziagent-platform-core}
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        VCS_REF: ${PLATFORM_CORE_VCS_REF:-unknown}
+    image: ${PLATFORM_CORE_IMAGE:-zhiziagent-platform-core:caplatform-pilot}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agentctl:
+        condition: service_healthy
+      parsecore-api:
+        condition: service_healthy
+    environment:
+      ZAP_APP_ENV: production
+      ZAP_ASSEMBLY_PROFILE: core
+      ZAP_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-zhiziagent}:${POSTGRES_PASSWORD}@postgres:5432/zhiziagent_platform
+      ZAP_JWT_SECRET: ${ZAP_JWT_SECRET:?set ZAP_JWT_SECRET}
+      ZAP_CORS_ORIGINS: http://localhost:${WEB_PORT:-8088}
+      ZAP_AUTO_CREATE_SCHEMA: "false"
+      ZAP_PUBLIC_REGISTRATION_TENANT_SLUG: ${ZAP_PUBLIC_REGISTRATION_TENANT_SLUG:?set the stable CAPLATFORM organization tenant slug}
+      ZAP_PARSECORE_BASE_URL: http://parsecore-api:8090
+      ZAP_PARSECORE_API_KEY: ${PARSECORE_API_KEY:?set the internal ParseCore API key}
+      ZAP_PARSECORE_UPLOAD_BRIDGE_API_KEY: ${PARSECORE_UPLOAD_BRIDGE_API_KEY:?set the internal ParseCore upload bridge API key}
+      ZAP_AGENTCTL_BASE_URL: http://agentctl:8080
+      ZAP_AGENTCTL_ADMIN_TOKEN: ${ZAP_AGENTCTL_ADMIN_TOKEN:?set ZAP_AGENTCTL_ADMIN_TOKEN}
+      ZAP_AGENTCTL_ENTITLEMENT_SYNC_HMAC_SECRET: ${ZAP_AGENTCTL_ENTITLEMENT_SYNC_HMAC_SECRET:?set ZAP_AGENTCTL_ENTITLEMENT_SYNC_HMAC_SECRET}
+      ZAP_PLATFORM_TOOL_CONTEXT_SECRET: ${ZAP_PLATFORM_TOOL_CONTEXT_SECRET:?set ZAP_PLATFORM_TOOL_CONTEXT_SECRET}
+      ZAP_BOOTSTRAP_ADMIN_TOKEN: ${ZAP_BOOTSTRAP_ADMIN_TOKEN:?set ZAP_BOOTSTRAP_ADMIN_TOKEN}
+      # Core uses its mounted local storage volume in the single-host pilot.
+      # Keep SSRF protection enabled even though a MinIO service is available
+      # for external products in the same compose network.
+      ZAP_STORAGE_ALLOW_PRIVATE_NETWORK_ENDPOINTS: "false"
+    volumes:
+      - core_storage:/app/.storage
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 25s
+    networks: [caplatform]
+
+  bff:
+    build:
+      context: ../apps/bff
+      dockerfile: Dockerfile
+      additional_contexts:
+        agentctl_release: ${AGENTCTL_RELEASE_CONTEXT:-../../Agent/.artifacts/managed-memory-growth/dist}
+      args:
+        VCS_REF: ${CAPLATFORM_VCS_REF:-unknown}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-100}
+    image: ${BFF_IMAGE:-caplatform-bff:pilot}
+    restart: unless-stopped
+    depends_on:
+      platform-core:
+        condition: service_healthy
+      agentctl:
+        condition: service_healthy
+    environment:
+      CAPLATFORM_ENVIRONMENT: pilot
+      CAPLATFORM_AI_MODE: remote
+      CAPLATFORM_PRODUCT_ID: civil_aviation_workbench
+      CAPLATFORM_WEB_ORIGINS: ${CAPLATFORM_WEB_ORIGINS:-http://localhost:8088,http://localhost:5180,http://localhost:5182}
+      CAPLATFORM_SESSION_COOKIE_SECURE: "false"
+      CAPLATFORM_SESSION_ENCRYPTION_SECRET: ${CAPLATFORM_SESSION_ENCRYPTION_SECRET:?set CAPLATFORM_SESSION_ENCRYPTION_SECRET}
+      CAPLATFORM_SESSION_ENCRYPTION_SECRET_PREVIOUS: ${CAPLATFORM_SESSION_ENCRYPTION_SECRET_PREVIOUS:-}
+      PLATFORM_CORE_BASE_URL: http://platform-core:8000
+      PLATFORM_CORE_PUBLIC_BASE_URL: ${PLATFORM_CORE_PUBLIC_BASE_URL:-http://localhost:8010}
+      PLATFORM_CONNECTION_ID: ${PLATFORM_CONNECTION_ID:?set PLATFORM_CONNECTION_ID after onboarding}
+      PLATFORM_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN:?set PLATFORM_SERVICE_TOKEN}
+      AGENTCTL_BASE_URL: http://agentctl:8080
+      CAPLATFORM_PRODUCT_EVENT_TOKEN: ${CAPLATFORM_PRODUCT_EVENT_TOKEN:?set project event service token}
+      AIPROJECTOPS_BASE_URL: http://aiprojectops:8000
+      DATA_STRUCTURING_TOOLHOST_BASE_URL: http://data-structuring-toolhost:8787
+      CAPLATFORM_TOOL_PACKAGE_RELEASE_DIR: /opt/caplatform/tool-packages
+      CAPLATFORM_ACTIVE_TOOL_PACKAGE_IDS: ai-opportunity-scan
+      CAPLATFORM_STATE_DATABASE_PATH: /var/lib/caplatform/caplatform.sqlite3
+      CAPLATFORM_PROJECT_TASK_PROPOSAL_TTL_SECONDS: ${CAPLATFORM_PROJECT_TASK_PROPOSAL_TTL_SECONDS:-86400}
+      MAILHUB_BASE_URL: ${MAILHUB_BASE_URL:-}
+      MAILHUB_TIMEOUT_SECONDS: ${MAILHUB_TIMEOUT_SECONDS:-15}
+      MAILHUB_HOST_SERVICE_TOKEN: ${MAILHUB_HOST_SERVICE_TOKEN:-}
+      MAILHUB_CREDENTIAL_ENCRYPTION_SECRET: ${MAILHUB_CREDENTIAL_ENCRYPTION_SECRET:-}
+      MAILHUB_GMAIL_ENABLED: ${MAILHUB_GMAIL_ENABLED:-false}
+      MAILHUB_GMAIL_CLIENT_ID: ${MAILHUB_GMAIL_CLIENT_ID:-}
+      MAILHUB_GMAIL_CLIENT_SECRET: ${MAILHUB_GMAIL_CLIENT_SECRET:-}
+      MAILHUB_GMAIL_AUTHORIZATION_ENDPOINT: ${MAILHUB_GMAIL_AUTHORIZATION_ENDPOINT:-https://accounts.google.com/o/oauth2/v2/auth}
+      MAILHUB_GMAIL_REDIRECT_URI: ${MAILHUB_GMAIL_REDIRECT_URI:-}
+      MAILHUB_GMAIL_SCOPES: ${MAILHUB_GMAIL_SCOPES:-https://www.googleapis.com/auth/gmail.readonly}
+      MAILHUB_MICROSOFT_GRAPH_ENABLED: ${MAILHUB_MICROSOFT_GRAPH_ENABLED:-false}
+      MAILHUB_GRAPH_CLIENT_ID: ${MAILHUB_GRAPH_CLIENT_ID:-}
+      MAILHUB_GRAPH_CLIENT_SECRET: ${MAILHUB_GRAPH_CLIENT_SECRET:-}
+      MAILHUB_GRAPH_AUTHORIZATION_ENDPOINT: ${MAILHUB_GRAPH_AUTHORIZATION_ENDPOINT:-https://login.microsoftonline.com/common/oauth2/v2.0/authorize}
+      MAILHUB_GRAPH_AUTHORITY_TENANT: ${MAILHUB_GRAPH_AUTHORITY_TENANT:-common}
+      MAILHUB_GRAPH_REDIRECT_URI: ${MAILHUB_GRAPH_REDIRECT_URI:-}
+      MAILHUB_GRAPH_SCOPES: ${MAILHUB_GRAPH_SCOPES:-Mail.Read,offline_access}
+    volumes:
+      - caplatform_state:/var/lib/caplatform
+      - ./tool_packages/release:/opt/caplatform/tool-packages:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/readyz', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [caplatform]
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+      args:
+        VITE_AI_MODE: remote
+        VITE_BFF_BASE_URL: ""
+        VCS_REF: ${CAPLATFORM_VCS_REF:-unknown}
+    image: ${WEB_IMAGE:-caplatform-web:pilot}
+    restart: unless-stopped
+    depends_on:
+      bff:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8088}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [caplatform]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    networks: [caplatform]
+
+  enterprise-document-management:
+    image: ${EDM_IMAGE:-enterprise-document-management:local}
+    profiles: [external-products]
+    networks: [caplatform]
+
+  aiprojectops-db:
+    image: postgres:16-alpine
+    profiles: [external-products]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aiprojectops
+      POSTGRES_USER: aiprojectops
+      POSTGRES_PASSWORD: ${AIPROJECTOPS_DB_PASSWORD:?set AIPROJECTOPS_DB_PASSWORD}
+    volumes:
+      - aiprojectops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiprojectops -d aiprojectops"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [caplatform]
+
+  aiprojectops:
+    build:
+      context: ${AIPROJECTOPS_CONTEXT:-../../AIProjectOPS}
+      dockerfile: deploy/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_DEFAULT_TIMEOUT: ${PIP_DEFAULT_TIMEOUT:-100}
+    image: ${AIPROJECTOPS_IMAGE:-aiprojectops:local}
+    profiles: [external-products]
+    restart: unless-stopped
+    depends_on:
+      aiprojectops-db:
+        condition: service_healthy
+      platform-core:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://aiprojectops:${AIPROJECTOPS_DB_PASSWORD}@aiprojectops-db:5432/aiprojectops
+      AIPROJECTOPS_AUTH_MODE: platform
+      AIPROJECTOPS_PLATFORM_REQUIRE_APP_ENABLED: "true"
+      AIPROJECTOPS_PLATFORM_REQUIRED_APP_ID: aiprojectops
+      AIPROJECTOPS_INTERNAL_DEBUG_UI: "false"
+      PLATFORM_CORE_BASE_URL: http://platform-core:8000
+      PLATFORM_CORE_TIMEOUT_SECONDS: "5"
+      LOG_LEVEL: INFO
+    command: >-
+      sh -c "alembic upgrade head &&
+      exec uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --workers 1 --log-level info"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 25s
+    networks: [caplatform]
+
+  aiprojectops-planning-worker:
+    image: ${AIPROJECTOPS_IMAGE:-aiprojectops:local}
+    profiles: [external-products]
+    restart: unless-stopped
+    depends_on:
+      aiprojectops-db:
+        condition: service_healthy
+      agentctl:
+        condition: service_healthy
+      aiprojectops:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://aiprojectops:${AIPROJECTOPS_DB_PASSWORD}@aiprojectops-db:5432/aiprojectops
+      AGENTCTL_BASE_URL: http://agentctl:8080
+      AGENTCTL_SERVICE_TOKEN: ${AIPROJECTOPS_AGENTCTL_SERVICE_TOKEN:?set a dedicated model_gateway.complete token}
+      PROJECT_PLANNING_WORKER_ID: ${PROJECT_PLANNING_WORKER_ID:-caplatform-project-planner}
+      PROJECT_PLANNING_POLL_SECONDS: ${PROJECT_PLANNING_POLL_SECONDS:-3}
+      PROJECT_PLANNING_BATCH_SIZE: ${PROJECT_PLANNING_BATCH_SIZE:-3}
+      PROJECT_PLANNER_MODEL_HINT: ${PROJECT_PLANNER_MODEL_HINT:-}
+      PROJECT_PLANNER_TIMEOUT_SECONDS: ${PROJECT_PLANNER_TIMEOUT_SECONDS:-120}
+      LOG_LEVEL: INFO
+    command: python -m apps.worker.project_planning_runner
+    networks: [caplatform]
+
+  aiprojectops-event-worker:
+    image: ${AIPROJECTOPS_IMAGE:-aiprojectops:local}
+    profiles: [external-products]
+    restart: unless-stopped
+    depends_on:
+      aiprojectops-db:
+        condition: service_healthy
+      aiprojectops:
+        condition: service_healthy
+      bff:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://aiprojectops:${AIPROJECTOPS_DB_PASSWORD}@aiprojectops-db:5432/aiprojectops
+      CAPLATFORM_INTERNAL_BASE_URL: http://bff:8088
+      CAPLATFORM_PRODUCT_EVENT_TOKEN: ${CAPLATFORM_PRODUCT_EVENT_TOKEN:?set project event service token}
+      PROJECT_EVENT_WORKER_ID: ${PROJECT_EVENT_WORKER_ID:-caplatform-project-events}
+      PROJECT_EVENT_POLL_SECONDS: ${PROJECT_EVENT_POLL_SECONDS:-3}
+      PROJECT_EVENT_BATCH_SIZE: ${PROJECT_EVENT_BATCH_SIZE:-50}
+      LOG_LEVEL: INFO
+    command: python -m apps.worker.domain_event_outbox_runner
+    networks: [caplatform]
+
+  data-structuring-toolhost:
+    build:
+      context: ./data_structuring_toolhost
+      dockerfile: Dockerfile
+      additional_contexts:
+        agentctl_release: ${AGENTCTL_RELEASE_CONTEXT:-../../Agent/.artifacts/managed-memory-growth/dist}
+        toolkit_upstream: ${TOOLKIT_RELEASE_CONTEXT:-../.tmp/toolkit-build-context}
+        skill_source: ../packages/ai-opportunity-scan-core
+      args:
+        VCS_REF: ${CAPLATFORM_VCS_REF:-unknown}
+    image: ${TOOLHOST_IMAGE:-caplatform-governed-toolhost:local}
+    profiles: [external-products]
+    restart: unless-stopped
+    depends_on:
+      platform-core:
+        condition: service_healthy
+    environment:
+      PLATFORM_CORE_BASE_URL: http://platform-core:8000
+      TOOLHOST_PLATFORM_SERVICE_TOKEN: ${TOOLHOST_PLATFORM_SERVICE_TOKEN:-}
+      TOOLHOST_MANIFEST_DIR: /opt/caplatform/tool-packages
+    volumes:
+      - ./tool_packages/release:/opt/caplatform/tool-packages:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/healthz', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [caplatform]
+
+volumes:
+  platform_pgdata:
+  redis_data:
+  minio_data:
+  core_storage:
+  caplatform_state:
+  agentctl_state:
+  aiprojectops_pgdata:
+  parsecore_state:
+
+networks:
+  caplatform:
+    name: caplatform_pilot

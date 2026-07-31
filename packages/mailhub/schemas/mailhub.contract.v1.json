@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mailhub.invalid/schemas/mailhub.contract.v1.json",
+  "title": "MailHub v1 contract primitives",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "trace_id", "tenant_id", "data"],
+  "properties": {
+    "schema_version": {"const": "mailhub.contract.v1"},
+    "kind": {"type": "string", "minLength": 1},
+    "trace_id": {"type": "string", "minLength": 1},
+    "tenant_id": {"type": "string", "minLength": 1},
+    "subject_id": {"type": ["string", "null"]},
+    "idempotency_key": {"type": ["string", "null"]},
+    "data": {"type": "object"},
+    "error": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable", "outcome_unknown"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "retryable": {"type": "boolean"},
+        "outcome_unknown": {"type": "boolean"},
+        "details": {"type": "object"}
+      }
+    }
+  }
+}

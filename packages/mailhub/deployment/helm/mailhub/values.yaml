@@ -1,0 +1,42 @@
+image:
+  repository: registry.example.invalid/mailhub
+  # A release must replace this with an immutable digest. The placeholder is
+  # intentionally invalid so an unconfigured chart cannot be deployed.
+  digest: ""
+  pullPolicy: IfNotPresent
+replicaCount: 2
+# Keep outbound disabled until the host approval, sender interlock and
+# provider conformance gates are explicitly enabled by the release owner.
+outboundEnabled: false
+# Durable sync/autonomy/outbox worker lease in seconds; bounded by MailHub.
+jobLeaseSeconds: "300"
+# Independent L3A organize kill switch. Keep disabled until policy, quota,
+# host-action and incident-drill gates are approved.
+ruleAutomationEnabled: false
+# Required in any release that enables outbound or rule automation; the host
+# endpoint owns four-eyes switch changes and the authoritative audit ledger.
+service:
+  port: 8000
+externalSecret:
+  name: mailhub-runtime
+  # The Secret object is owned by the platform Secret Manager integration.
+  keys:
+    databaseUrl: MAILHUB_DATABASE_URL
+    kmsKeyRef: MAILHUB_KMS_KEY_REF
+    objectStoreEndpoint: MAILHUB_OBJECT_STORE_ENDPOINT
+    avScannerEndpoint: MAILHUB_AV_SCANNER_ENDPOINT
+    dlpEndpoint: MAILHUB_DLP_ENDPOINT
+    credentialBrokerEndpoint: MAILHUB_CREDENTIAL_BROKER_ENDPOINT
+    hostServiceToken: MAILHUB_HOST_SERVICE_TOKEN
+    hostIdentityEndpoint: MAILHUB_HOST_IDENTITY_ENDPOINT
+    approvalEndpoint: MAILHUB_APPROVAL_ENDPOINT
+    aiExecutionEndpoint: MAILHUB_AI_EXECUTION_ENDPOINT
+    hostActionEndpoint: MAILHUB_HOST_ACTION_ENDPOINT
+    knowledgeEndpoint: MAILHUB_KNOWLEDGE_ENDPOINT
+    agentMemoryEndpoint: MAILHUB_AGENT_MEMORY_ENDPOINT
+    eventPublisherEndpoint: MAILHUB_EVENT_PUBLISHER_ENDPOINT
+    telemetryEndpoint: MAILHUB_TELEMETRY_ENDPOINT
+    quotaEndpoint: MAILHUB_QUOTA_ENDPOINT
+    providerSubscriptionEndpoint: MAILHUB_PROVIDER_SUBSCRIPTION_ENDPOINT
+    providerNotificationVerifierEndpoint: MAILHUB_PROVIDER_NOTIFICATION_VERIFIER_ENDPOINT
+    killSwitchEndpoint: MAILHUB_KILL_SWITCH_ENDPOINT

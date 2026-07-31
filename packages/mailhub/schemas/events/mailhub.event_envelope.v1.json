@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mailhub.invalid/schemas/events/mailhub.event_envelope.v1.json",
+  "title": "MailHub event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "trace_id", "tenant_id", "data"],
+  "properties": {
+    "schema_version": {"const": "mailhub.event_envelope.v1"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"type": "string", "minLength": 1, "maxLength": 200},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "trace_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "subject_id": {"type": ["string", "null"], "maxLength": 200},
+    "idempotency_key": {"type": ["string", "null"], "maxLength": 512},
+    "data": {"type": "object"}
+  }
+}

@@ -1,0 +1,182 @@
+providers:
+- provider: openai-compatible
+  provider_alias: fyjit-deepseek
+  model: deepseek-v4-flash
+  capabilities:
+  - chat
+  - json
+  - tool_calling
+  api_key_env: CAPLATFORM_MODEL_API_KEY
+  base_url_env: CAPLATFORM_MODEL_BASE_URL
+  region: third-party-provider
+  default: true
+
+runtime:
+  local_tool_providers:
+  - knowledge_search
+
+tenants:
+  default:
+    budget_tokens: 500000
+
+deployment_profile: lite
+lite_mode: growth
+capabilities:
+  model_gateway: enabled
+  ledger: enabled
+  scoped_tokens: enabled
+  product_context_admission: enabled
+  frontdesk: enabled
+  agent_directory: enabled
+  agent_growth: enabled
+  memory: enabled
+  knowledge: disabled
+  automation: disabled
+  enterprise_evidence: disabled
+
+runstore:
+  kind: sqlite
+  path: /app/.agentctl/runs.sqlite
+
+ledger:
+  kind: sqlite
+  path: /app/.agentctl/ledger.sqlite
+
+control_plane:
+  enabled: true
+  store:
+    kind: sqlite
+    path: /app/.agentctl/control_plane.sqlite
+
+meta:
+  kind: sqlite
+  path: /app/.agentctl/meta.sqlite
+
+runtime_dispatch:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/runtime_dispatch.sqlite
+
+platform_core:
+  instruction_skills:
+    enabled: true
+    base_url: http://platform-core:8000
+    service_token_env: AGENTCTL_PLATFORM_INSTRUCTION_SKILLS_TOKEN
+    tenant_id_env: CAPLATFORM_TENANT_ID
+    timeout_seconds: 3
+    max_total_tokens: 4096
+    allowed_content_roots:
+    - /caplatform/deployment/instruction_skills/content
+    content_refs:
+      protected://instruction-skill/ai-opportunity-scan/1.2.0/instruction.md: /caplatform/deployment/instruction_skills/content/ai-opportunity-scan.md
+      protected://instruction-skill/aviation-evidence-review/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/aviation-evidence-review.md
+      protected://instruction-skill/aviation-high-risk-boundary/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/aviation-high-risk-boundary.md
+      protected://instruction-skill/aviation-project-delivery/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/aviation-project-delivery.md
+      protected://instruction-skill/aviation-sms-analysis-draft/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/aviation-sms-analysis-draft.md
+      protected://instruction-skill/aviation-technical-solution-draft/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/aviation-technical-solution-draft.md
+      protected://instruction-skill/docx/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/docx.md
+      protected://instruction-skill/email-manager/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/email-manager.md
+      protected://instruction-skill/legal-risk-analyzer/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/legal-risk-analyzer.md
+      protected://instruction-skill/pdf/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/pdf.md
+      protected://instruction-skill/sop-writer/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/sop-writer.md
+      protected://instruction-skill/value-aircraft-lite/1.2.0/instruction.md: /caplatform/deployment/instruction_skills/content/value-aircraft-lite.md
+      protected://instruction-skill/value-engine-lite/1.2.0/instruction.md: /caplatform/deployment/instruction_skills/content/value-engine-lite.md
+      protected://instruction-skill/xlsx/1.0.0/instruction.md: /caplatform/deployment/instruction_skills/content/xlsx.md
+  tool_bindings:
+    enabled: true
+    base_url: http://platform-core:8000
+    service_token_env: AGENTCTL_PLATFORM_TOOL_BINDINGS_TOKEN
+    tenant_id_env: CAPLATFORM_TENANT_ID
+    timeout_seconds: 3
+    page_size: 100
+    endpoint_refs:
+      ref://runtime/data-structuring-toolhost: http://data-structuring-toolhost:8787
+    toolhost_allowed_hosts:
+    - data-structuring-toolhost
+    toolhost_allow_http: true
+    toolhost_allow_private_network: true
+
+tracer:
+  kind: console
+
+model_gateway:
+  # Project blueprint generation is a bounded long-output call; keep this
+  # below the planning worker deadline while allowing governed JSON output.
+  default_timeout_seconds: 90
+  circuit_breaker_failure_threshold: 5
+  circuit_breaker_cooldown_seconds: 60
+
+product_integration:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/product_integration.sqlite
+  capability_manifests:
+  - /caplatform/deployment/agentctl.capabilities.yaml
+  assurance_profile: governed_execution
+  admission:
+    enabled: true
+    required_stage: pilot_ready
+    require_product_context: true
+    enforce_bindings: true
+auth:
+  scopes: enabled
+  token_store:
+    kind: sqlite
+    path: /app/.agentctl/tokens.sqlite
+runtime_protocol:
+  assurance_profile: governed_execution
+  config_provenance:
+    source: file
+    ref: config://caplatform/deployment/runtime.config.docker.yaml
+    version: '1'
+    loader: agentctl.config.load_runtime_config
+    override_lineage: []
+    secret_refs: []
+  data_egress_declarations:
+  - destination: fyjit-deepseek:deepseek-v4-flash
+    channel: model
+    purpose: governed CAPlatform conversational assistance
+    data_categories:
+    - context
+    - prompt
+    max_sensitivity: D1
+    tenant_boundary: same_tenant
+    region: third-party-provider
+    retention: none
+    training_use: false
+    owner: caplatform-security-owner
+    review_version: '2'
+    reviewed_at: '2026-07-24T00:00:00Z'
+    expires_at: '2027-07-24T00:00:00Z'
+    decision: allow
+frontdesk:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/frontdesk.sqlite
+  profile:
+    name: coordinator_v2
+    core_state_mode: core_connected
+  representative_memory:
+    store:
+      kind: sqlite
+      path: /app/.agentctl/frontdesk_representative_memory.sqlite
+  features:
+    coordinator_v2: true
+    semantic_shadow: false
+    progressive_capability_context: true
+interaction:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/interaction.sqlite
+autonomy:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/autonomy.sqlite
+integration:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/integration.sqlite
+memory_plane:
+  store:
+    kind: sqlite
+    path: /app/.agentctl/memory_graph.sqlite

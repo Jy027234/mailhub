@@ -1,0 +1,1840 @@
+schema_version: agentctl.product_capabilities.v1
+product_id: civil_aviation_workbench
+display_name: 民航技术与安全 AI 工作平台
+owner: caplatform-product-team
+product_type: ai_workbench
+environments:
+- development
+- test
+allowed_tenants:
+- '*'
+default_tenant_id: '*'
+status: pilot_ready
+capabilities:
+- capability_id: ca.governance.expert_directory
+  product_operation: agent.directory.read
+  binding_id: bind_civil_aviation_workbench_agent_directory_read
+  version: 1.0.0
+  title: 专家目录产品准入合同
+  description: 仅为现有 Agentctl 专家目录 API 提供产品、租户和操作级准入绑定，不作为用户可调用能力。
+  when_not_to_use:
+  - 不得在用户任务中直接调用
+  handler: civil_aviation_workbench_agentctl_handlers:admission_contract_only
+  input_schema:
+    type: object
+    additionalProperties: false
+  output_schema:
+    type: object
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D1
+  required_scopes:
+  - agent.directory.read
+  confirmation_policy: none
+  availability:
+    status: admission_only
+  metadata:
+    admission_only: true
+    user_invocable: false
+- capability_id: ca.governance.expert_impact
+  product_operation: agent.management.impact
+  binding_id: bind_civil_aviation_workbench_agent_management_impact
+  version: 1.0.0
+  title: 专家影响评估产品准入合同
+  description: 仅为现有 Agentctl 专家影响评估 API 提供产品、租户和操作级准入绑定，不作为用户可调用能力。
+  when_not_to_use:
+  - 不得在用户任务中直接调用
+  handler: civil_aviation_workbench_agentctl_handlers:admission_contract_only
+  input_schema:
+    type: object
+    additionalProperties: false
+  output_schema:
+    type: object
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D1
+  required_scopes:
+  - agent.directory.read
+  confirmation_policy: none
+  availability:
+    status: admission_only
+  metadata:
+    admission_only: true
+    user_invocable: false
+- capability_id: ca.governance.expert_upsert
+  product_operation: agent.management.upsert
+  binding_id: bind_civil_aviation_workbench_agent_management_upsert
+  version: 1.0.0
+  title: 个人专家配置产品准入合同
+  description: 仅为现有 Agentctl 个人专家配置 API 提供产品、租户和操作级准入绑定，不作为用户可调用能力。
+  when_not_to_use:
+  - 不得在用户任务中直接调用
+  handler: civil_aviation_workbench_agentctl_handlers:admission_contract_only
+  input_schema:
+    type: object
+    additionalProperties: false
+  output_schema:
+    type: object
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D1
+  required_scopes:
+  - agent.write
+  confirmation_policy: none
+  availability:
+    status: admission_only
+  metadata:
+    admission_only: true
+    user_invocable: false
+- capability_id: ca.governance.expert_publish
+  product_operation: agent.management.publish
+  binding_id: bind_civil_aviation_workbench_agent_management_publish
+  version: 1.0.0
+  title: 专家发布产品准入合同
+  description: 仅为现有 Agentctl 专家发布 API 提供产品、租户和操作级准入绑定，不作为用户可调用能力。
+  when_not_to_use:
+  - 不得在用户任务中直接调用
+  handler: civil_aviation_workbench_agentctl_handlers:admission_contract_only
+  input_schema:
+    type: object
+    additionalProperties: false
+  output_schema:
+    type: object
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R2
+  data_sensitivity: D1
+  required_scopes:
+  - agent.publish
+  confirmation_policy: none
+  availability:
+    status: admission_only
+  metadata:
+    admission_only: true
+    user_invocable: false
+- capability_id: ca.governance.expert_run
+  product_operation: agent.run
+  binding_id: bind_civil_aviation_workbench_agent_run
+  version: 1.0.0
+  title: 专家试用运行产品准入合同
+  description: 仅为现有 Agentctl 专家运行 API 提供产品、租户和操作级准入绑定，不作为用户可调用能力。
+  when_not_to_use:
+  - 不得在用户任务中直接调用
+  handler: civil_aviation_workbench_agentctl_handlers:admission_contract_only
+  input_schema:
+    type: object
+    additionalProperties: false
+  output_schema:
+    type: object
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D1
+  required_scopes:
+  - agent.run
+  confirmation_policy: none
+  availability:
+    status: admission_only
+  metadata:
+    admission_only: true
+    user_invocable: false
+- capability_id: ca.report.generate_preview
+  version: 1.0.0
+  title: 生成民航专业报告草稿
+  description: 根据结构化主题生成未发布、可编辑的报告草稿；不形成适航或安全最终结论。
+  when_to_use:
+  - 生成一份民航技术报告草稿
+  - 根据主题创建可编辑报告
+  when_not_to_use:
+  - 适航批准或符合性最终签署
+  - 维修放行、运行控制或安全风险接受
+  handler: civil_aviation_workbench_agentctl_handlers:report_create
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - topic
+    properties:
+      topic:
+        type: string
+        minLength: 1
+        maxLength: 500
+  output_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - artifact
+    - evidence
+    properties:
+      artifact:
+        type: object
+      evidence:
+        type: object
+  result_object_types:
+  - artifact_ref
+  - evidence_ref
+  side_effect_class: artifact
+  risk_level: R1
+  data_sensitivity: D1
+  required_scopes:
+  - ca.report.generate
+  confirmation_policy: explicit
+  compact_input_summary:
+    required:
+    - topic
+  compact_output_summary:
+    result_object_types:
+    - artifact_ref
+    - evidence_ref
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  rollback:
+    strategy: revoke_artifact_ref
+    owner: caplatform-product-team
+  smoke:
+    query: 请生成一份 CCAR-145 质量审核周期分析报告草稿
+    arguments:
+      topic: CCAR-145 质量审核周期分析
+  metadata:
+    output_class: proposal
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.project.create_task
+  version: 1.0.0
+  title: 在 AIProjectOPS 新建项目任务
+  description: 经用户明确确认后，在指定 AIProjectOPS 项目中幂等创建一条可追溯任务。
+  when_to_use:
+  - 将已确认的工作项写入 AIProjectOPS 项目
+  - 在指定项目中创建一条项目任务
+  when_not_to_use:
+  - 未明确指定目标项目
+  - 用户尚未确认写入摘要
+  - 修改、删除或直接执行已有任务
+  handler:
+    kind: python
+    ref: civil_aviation_workbench_agentctl_handlers:project_task_create
+    timeout_seconds: 20
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - project_id
+    - title
+    properties:
+      project_id:
+        type: string
+        format: uuid
+      title:
+        type: string
+        minLength: 1
+        maxLength: 256
+      description:
+        type:
+        - string
+        - 'null'
+        maxLength: 4000
+      stage_id:
+        type:
+        - string
+        - 'null'
+        format: uuid
+  output_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - task_ref
+    - evidence
+    properties:
+      task_ref:
+        type: object
+        additionalProperties: false
+        required:
+        - task_id
+        - project_id
+        - state
+        - source_system
+        - creation_ref
+        properties:
+          task_id:
+            type: string
+          project_id:
+            type: string
+          state:
+            type: string
+          source_system:
+            const: aiprojectops
+          creation_ref:
+            type: string
+      evidence:
+        type: object
+        additionalProperties: false
+        required:
+        - kind
+        - trace_id
+        - provider_status
+        - idempotency_replayed
+        properties:
+          kind:
+            const: aiprojectops_mcp
+          trace_id:
+            type: string
+          provider_status:
+            enum:
+            - created
+            - replayed
+          idempotency_replayed:
+            type: boolean
+  result_object_types:
+  - task_ref
+  - evidence_ref
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D1
+  required_scopes:
+  - ca.project.write
+  confirmation_policy: explicit
+  compact_input_summary:
+    required:
+    - project_id
+    - title
+  compact_output_summary:
+    result_object_types:
+    - task_ref
+    - evidence_ref
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+    upstream: aiprojectops_mcp
+  rollback:
+    strategy: manual_task_state_compensation
+    owner: aiprojectops-product-team
+  smoke:
+    query: 请在指定 AIProjectOPS 项目中创建一条联调任务
+    arguments:
+      project_id: 00000000-0000-0000-0000-000000000001
+      title: CAPlatform 受治理写入联调
+  metadata:
+    output_class: governed_external_write
+    authoritative_decision: false
+    fact_owner: aiprojectops
+    pilot_only: true
+- capability_id: ca.project.external_event.propose
+  version: 1.0.0
+  title: 将外部事件转为项目审阅提案
+  description: 将 CAPlatform 已验签和规范化的外部动作请求写入 AIProjectOPS 产品 intake；只形成待审阅提案，不直接修改项目权威事实。
+  when_to_use:
+  - 外部 Webhook 请求改变项目、触发专家或执行外部写入
+  when_not_to_use:
+  - 未经 CAPlatform 网关验签和规范化的原始 payload
+  - 绕过人工确认直接修改项目任务、依赖、交付物或资产
+  handler: civil_aviation_workbench_agentctl_handlers:project_external_event_propose
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [source_receipt_id, normalized_event]
+    properties:
+      source_receipt_id: {type: string, minLength: 1, maxLength: 160}
+      normalized_event:
+        type: object
+        additionalProperties: true
+        required: [schema_version, provider, event_type]
+        properties:
+          schema_version: {type: string, const: caplatform.external_event.v1}
+          provider: {type: string, maxLength: 64}
+          provider_event_id: {type: [string, 'null'], maxLength: 256}
+          event_type: {type: string, maxLength: 160}
+          project_match: {type: [string, 'null']}
+          payload_summary: {type: object}
+      handler_ref: {type: [string, 'null'], maxLength: 256}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [intake_ref, evidence_ref]
+    properties:
+      intake_ref:
+        type: object
+        additionalProperties: true
+        required: [intake_id, source_receipt_id, status, authoritative_write_performed]
+      evidence_ref:
+        type: object
+        additionalProperties: true
+        required: [evidence_id, kind, trace_id, capability_id]
+  result_object_types: [intake_ref, evidence_ref]
+  side_effect_class: none
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes: [ca.project.write]
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+    upstream: aiprojectops_external_event_intakes
+  smoke:
+    query: 将已验签的外部项目事件转成待审阅提案
+    arguments:
+      source_receipt_id: smoke-external-event-001
+      normalized_event:
+        schema_version: caplatform.external_event.v1
+        provider: generic
+        provider_event_id: smoke-001
+        event_type: project.change_requested
+        project_match: null
+        payload_summary: {action: change_requested}
+  metadata:
+    output_class: proposal
+    authoritative_decision: false
+    direct_domain_write: false
+    fact_owner: aiprojectops
+- capability_id: ca.project.generate_plan
+  version: 1.0.0
+  title: 生成可审阅项目蓝图
+  description: 基于 AIProjectOPS 项目简报和已解析来源提交异步规划任务，只生成草案，不写入正式项目。
+  when_to_use:
+  - 根据一句话启动项目规划
+  - 根据已导入项目文件生成项目蓝图
+  when_not_to_use:
+  - 未创建 AIProjectOPS 规划会话
+  - 直接批准或同步正式任务
+  handler: civil_aviation_workbench_agentctl_handlers:project_plan_submit
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - session_id
+    properties:
+      session_id:
+        type: string
+        format: uuid
+      base_draft_id:
+        type:
+        - string
+        - 'null'
+        format: uuid
+      instruction:
+        type:
+        - string
+        - 'null'
+        maxLength: 4000
+      planning_profile:
+        type:
+        - string
+        - 'null'
+        enum:
+        - balanced
+        - concise
+        - detailed
+        - null
+      capability_catalog:
+        type: object
+        additionalProperties: false
+        required: [schema_version, catalog_version, query, no_match, capabilities]
+        properties:
+          schema_version: {type: string, const: aiprojectops.capability_catalog_context.v1}
+          catalog_version: {type: string, maxLength: 256}
+          scoring_version: {type: string, maxLength: 256}
+          query: {type: string, maxLength: 8000}
+          no_match: {type: boolean}
+          capabilities:
+            type: array
+            maxItems: 20
+            items:
+              type: object
+              additionalProperties: true
+              required: [capability_id, title, side_effect_class, risk_level]
+  output_schema:
+    type: object
+    additionalProperties: true
+    required:
+    - job_ref
+    - evidence_ref
+    properties:
+      job_ref: {type: object}
+      evidence_ref: {type: object}
+      artifact_ref: {type: object}
+      error: {type: object}
+  result_object_types:
+  - job_ref
+  - artifact_ref
+  - evidence_ref
+  side_effect_class: artifact
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes:
+  - ca.project.write
+  confirmation_policy: explicit
+  async_mode: job
+  job_lifecycle:
+    role: submit
+    status_capability_id: ca.project.generate_plan.status
+    cancel_capability_id: ca.project.generate_plan.cancel
+  compact_input_summary:
+    required:
+    - session_id
+  compact_output_summary:
+    result_object_types:
+    - job_ref
+    - artifact_ref
+    - evidence_ref
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+    upstream: aiprojectops_planning_jobs
+  smoke:
+    query: 为已有项目规划会话生成一份可审阅项目蓝图
+    arguments:
+      session_id: 00000000-0000-0000-0000-000000000001
+      planning_profile: balanced
+  metadata:
+    output_class: proposal
+    authoritative_decision: false
+    fact_owner: aiprojectops
+    worker_model_route: agentctl.model_gateway
+- capability_id: ca.project.generate_plan.status
+  version: 1.0.0
+  title: 查询项目蓝图生成状态
+  description: 查询 AIProjectOPS 规划任务的权威状态与草案引用。
+  handler: civil_aviation_workbench_agentctl_handlers:project_plan_status
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [job_id]
+    properties:
+      job_id: {type: string, format: uuid}
+  output_schema:
+    type: object
+    additionalProperties: true
+    required: [job_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      evidence_ref: {type: object}
+      artifact_ref: {type: object}
+      error: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D2
+  required_scopes: [ca.project.write]
+  confirmation_policy: none
+  async_mode: job
+  job_lifecycle:
+    role: status
+- capability_id: ca.project.generate_plan.cancel
+  version: 1.0.0
+  title: 取消项目蓝图生成
+  description: 取消尚未完成的 AIProjectOPS 规划任务；已完成任务保持原终态。
+  handler: civil_aviation_workbench_agentctl_handlers:project_plan_cancel
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [job_id]
+    properties:
+      job_id: {type: string, format: uuid}
+  output_schema:
+    type: object
+    additionalProperties: true
+    required: [job_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      evidence_ref: {type: object}
+      artifact_ref: {type: object}
+      error: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes: [ca.project.write]
+  confirmation_policy: explicit
+  async_mode: job
+  job_lifecycle:
+    role: cancel
+- capability_id: ca.project.execute_task
+  version: 1.0.0
+  title: 启动项目专家任务
+  description: 为已确认的 AIProjectOPS 专家或人机协作任务启动受治理的持久执行，返回稳定任务引用。
+  when_to_use:
+  - 用户在任务工作区明确启动专家执行
+  when_not_to_use:
+  - 纯人员任务
+  - 前置依赖未满足或用户未确认
+  handler: civil_aviation_workbench_agentctl_handlers:project_task_execution_submit
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [task_id]
+    properties:
+      task_id: {type: string, format: uuid}
+  output_schema:
+    type: object
+    additionalProperties: true
+    required: [job_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      evidence_ref: {type: object}
+      artifact_ref: {type: object}
+      error: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes: [ca.project.write]
+  confirmation_policy: explicit
+  async_mode: job
+  job_lifecycle:
+    role: submit
+    status_capability_id: ca.project.execute_task.status
+    cancel_capability_id: ca.project.execute_task.cancel
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+    upstream: aiprojectops_task_execution_runs
+  metadata:
+    output_class: governed_external_execution
+    authoritative_decision: false
+    fact_owner: aiprojectops
+- capability_id: ca.project.execute_task.status
+  version: 1.0.0
+  title: 查询项目专家任务状态
+  description: 查询 AIProjectOPS 中任务执行记录的权威状态、输出和错误。
+  handler: civil_aviation_workbench_agentctl_handlers:project_task_execution_status
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [task_id, job_id]
+    properties:
+      task_id: {type: string, format: uuid}
+      job_id: {type: string, format: uuid}
+  output_schema:
+    type: object
+    additionalProperties: true
+    required: [job_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      evidence_ref: {type: object}
+      artifact_ref: {type: object}
+      error: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D2
+  required_scopes: [ca.project.write]
+  confirmation_policy: none
+  async_mode: job
+  job_lifecycle:
+    role: status
+- capability_id: ca.project.execute_task.cancel
+  version: 1.0.0
+  title: 取消项目专家任务
+  description: 取消尚未派发的任务执行，或为已派发执行记录权威取消请求并等待运行时终态。
+  handler: civil_aviation_workbench_agentctl_handlers:project_task_execution_cancel
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [task_id, job_id]
+    properties:
+      task_id: {type: string, format: uuid}
+      job_id: {type: string, format: uuid}
+  output_schema:
+    type: object
+    additionalProperties: true
+    required: [job_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      evidence_ref: {type: object}
+      error: {type: object}
+  result_object_types: [job_ref, evidence_ref]
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes: [ca.project.write]
+  confirmation_policy: explicit
+  async_mode: job
+  job_lifecycle:
+    role: cancel
+- capability_id: ca.valuation.aircraft_lite
+  version: 1.1.0
+  title: 整机 Lite 指示性估值
+  description: 根据结构化整机状态数据生成可追溯的低值、中值和高值区间、价格桥、风险及 Pro 升级建议。
+  when_to_use:
+  - 对飞机整机进行 Lite 快速估值
+  - 根据整机状态数据计算价格区间和证据缺口
+  - 判断整机案例是否需要升级到航空器估值 Web 产品的 Pro 流程
+  when_not_to_use:
+  - 正式评估认证、融资或交易批准
+  - 缺少机型、制造序号或制造年份且要求输出数字
+  - 代替产权、法律、工程或市场专家签署
+  handler:
+    kind: http
+    url: http://lite-valuation-toolhost:8790/v1/capabilities/ca.valuation.aircraft_lite
+    timeout_seconds: 15
+    bearer_token_env: CAPLATFORM_LITE_VALUATION_HANDLER_TOKEN
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - input
+    - valuation_date
+    properties:
+      input:
+        type: object
+        minProperties: 1
+      valuation_date:
+        type: string
+        format: date
+  output_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - artifact_ref
+    - evidence_ref
+    properties:
+      artifact_ref:
+        type: object
+        additionalProperties: false
+        required:
+        - artifact_id
+        - artifact_type
+        - status
+        - content
+        properties:
+          artifact_id:
+            type: string
+          artifact_type:
+            const: aircraft_lite_indicative_valuation
+          status:
+            type: string
+          content:
+            type: object
+      evidence_ref:
+        type: object
+        additionalProperties: false
+        required:
+        - evidence_id
+        - kind
+        - trace_id
+        - invocation_id
+        - skill_id
+        - asset_type
+        - valuation_date
+        - input_digest
+        - config_version
+        - policy_status
+        properties:
+          evidence_id:
+            type: string
+          kind:
+            const: caplatform_lite_valuation
+          trace_id:
+            type: string
+          invocation_id:
+            type: string
+          skill_id:
+            const: value-aircraft-lite
+          asset_type:
+            const: aircraft
+          valuation_date:
+            type: string
+            format: date
+          input_digest:
+            type: string
+            pattern: ^sha256:[a-f0-9]{64}$
+          config_version:
+            type: string
+          policy_status:
+            type:
+            - string
+            - 'null'
+  result_object_types:
+  - artifact_ref
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes:
+  - ca.valuation.aircraft.read
+  confirmation_policy: none
+  compact_input_summary:
+    required:
+    - input
+    - valuation_date
+    input_contract: normalized_aircraft_lite_envelope
+  compact_output_summary:
+    result_object_types:
+    - artifact_ref
+    - evidence_ref
+    output_class: indicative_valuation
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  smoke:
+    query: 请根据这架 B737-800 的状态数据做整机 Lite 指示性估值
+    arguments:
+      valuation_date: '2026-07-26'
+      input:
+        asset:
+          id: AC-LITE-001
+          aircraftType: B737-800
+          manufacturer: Boeing
+          model: B737-800
+          msn: '30123'
+          yearOfManufacture: 2001
+          dom: '2001-01-01'
+          registration: B-5201
+          configuration: passenger
+          status: active
+          engines:
+          - position: LH
+            model: CFM56-7B26
+            serialNumber: LH-UNKNOWN
+            status: on-wing
+          - position: RH
+            model: CFM56-7B26
+            serialNumber: RH-UNKNOWN
+            status: on-wing
+          llps: []
+          maintenanceEvents: []
+          compliance: []
+        missingFields:
+        - operator
+        - tsn
+        - csn
+        parseSummary:
+          pageCount: 12
+          recordCount: 30
+          qualitySignals: 1
+        sourceReferences:
+        - type: test-fixture
+          caseId: AC-LITE-001
+        marketBaseline:
+          value: 23800000
+          currency: USD
+          source: Deterministic test fixture baseline
+          sourceCategory: test_fixture
+          asOf: '2026-07-01'
+          validUntil: '2026-08-31'
+          approvalRef: evidence://tests/aircraft-baseline/AC-LITE-001
+          approvedBy: test-fixture-reviewer
+          aircraftType: B737-800
+          configuration: passenger
+  metadata:
+    output_class: indicative_valuation
+    authoritative_decision: false
+    skill_id: value-aircraft-lite
+    escalation_target: aircraft_valuation_web_pro
+    pilot_only: true
+- capability_id: ca.valuation.engine_lite
+  version: 1.1.0
+  title: 发动机 Lite 指示性估值
+  description: 根据发动机状态、LLP 与证据数据生成可追溯的估值区间、折价、硬拦截项及 Pro 升级建议。
+  when_to_use:
+  - 对航空发动机进行 Lite 快速估值
+  - 根据 LLP 和发动机状态计算价格区间与风险折价
+  - 判断发动机案例是否需要升级到航空器估值 Web 产品的 Pro 流程
+  when_not_to_use:
+  - 正式评估认证、融资或交易批准
+  - 非内置型号缺少用户提供的市场基准且要求输出数字
+  - 代替 release、BtB、产权、shop visit 或发动机专家审查
+  handler:
+    kind: http
+    url: http://lite-valuation-toolhost:8790/v1/capabilities/ca.valuation.engine_lite
+    timeout_seconds: 15
+    bearer_token_env: CAPLATFORM_LITE_VALUATION_HANDLER_TOKEN
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - input
+    - valuation_date
+    properties:
+      input:
+        type: object
+        minProperties: 1
+      valuation_date:
+        type: string
+        format: date
+  output_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - artifact_ref
+    - evidence_ref
+    properties:
+      artifact_ref:
+        type: object
+        additionalProperties: false
+        required:
+        - artifact_id
+        - artifact_type
+        - status
+        - content
+        properties:
+          artifact_id:
+            type: string
+          artifact_type:
+            const: engine_lite_indicative_valuation
+          status:
+            type: string
+          content:
+            type: object
+      evidence_ref:
+        type: object
+        additionalProperties: false
+        required:
+        - evidence_id
+        - kind
+        - trace_id
+        - invocation_id
+        - skill_id
+        - asset_type
+        - valuation_date
+        - input_digest
+        - config_version
+        - policy_status
+        properties:
+          evidence_id:
+            type: string
+          kind:
+            const: caplatform_lite_valuation
+          trace_id:
+            type: string
+          invocation_id:
+            type: string
+          skill_id:
+            const: value-engine-lite
+          asset_type:
+            const: engine
+          valuation_date:
+            type: string
+            format: date
+          input_digest:
+            type: string
+            pattern: ^sha256:[a-f0-9]{64}$
+          config_version:
+            type: string
+          policy_status:
+            type:
+            - string
+            - 'null'
+  result_object_types:
+  - artifact_ref
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes:
+  - ca.valuation.engine.read
+  confirmation_policy: none
+  compact_input_summary:
+    required:
+    - input
+    - valuation_date
+    input_contract: normalized_engine_lite_envelope
+  compact_output_summary:
+    result_object_types:
+    - artifact_ref
+    - evidence_ref
+    output_class: indicative_valuation
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  smoke:
+    query: 请根据这台 CFM56-7B26 的状态数据做发动机 Lite 指示性估值
+    arguments:
+      valuation_date: '2026-07-26'
+      input:
+        enginePassport:
+          engineModel: CFM56-7B26
+          esn: '885432'
+          thrustRating: 26,000 lbf
+          position: unknown
+          status: installed_unknown
+          tsn: 56191
+          csn: 37964
+          tslsv: 24911
+          cslsv: 15673
+          llpLimiterCyclesRemaining: 9327
+          releaseCertificate: missing
+          btbTraceability: partial
+          quoteConfidence: D
+        llpStack: []
+        egtMargin: null
+        borescopeDate: null
+        titleChain: partial
+        sourceReferences:
+        - type: test-fixture
+          caseId: ENG-LITE-001
+  metadata:
+    output_class: indicative_valuation
+    authoritative_decision: false
+    policy_status: provisional
+    skill_id: value-engine-lite
+    escalation_target: engine_valuation_web_pro
+    pilot_only: true
+- capability_id: ca.mail.connection.list
+  version: 1.0.0
+  title: 列出已授权邮箱连接
+  description: 仅返回当前租户与主体可见的邮箱连接元数据，不返回 credential_ref、token 或正文。
+  when_not_to_use:
+  - 需要修改连接、授权范围或撤权
+  - 未提供已授权的 MailHub 主体上下文
+  handler: mailhub_agentctl_handlers:mail_connection_list
+  input_schema:
+    type: object
+    additionalProperties: false
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [connections, evidence]
+    properties:
+      connections: {type: array, maxItems: 50}
+      evidence: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [ca.mail.read]
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: mailbox_metadata
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.thread.list
+  version: 1.0.0
+  title: 读取邮件线程元数据
+  description: 读取已授权邮箱的线程摘要；正文必须通过独立受治理端点按需获取。
+  when_not_to_use:
+  - 需要读取未经授权的正文或附件
+  handler: mailhub_agentctl_handlers:mail_thread_list
+  input_schema:
+    type: object
+    additionalProperties: false
+    properties:
+      limit: {type: integer, minimum: 1, maximum: 200}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [threads, evidence]
+    properties:
+      threads: {type: array, maxItems: 200}
+      evidence: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [ca.mail.read]
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: thread_metadata
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.message.search
+  version: 1.0.0
+  title: 搜索邮件元数据
+  description: 使用 MailHub metadata/provider search 返回消息摘要；不返回正文，不自动建立全文索引。
+  when_not_to_use:
+  - 需要读取完整正文或附件
+  - 需要把搜索结果直接写入项目或知识权威
+  handler: mailhub_agentctl_handlers:mail_message_search
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [query]
+    properties:
+      query: {type: string, minLength: 1, maxLength: 200}
+      limit: {type: integer, minimum: 1, maximum: 200}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [messages, mode, evidence]
+    properties:
+      messages: {type: array, maxItems: 200}
+      mode: {const: metadata}
+      evidence: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [ca.mail.read]
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: message_metadata
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.message.analyze
+  version: 1.0.0
+  title: 生成邮件结构化候选
+  description: 读取已授权邮箱中的一封邮件，生成带证据定位的项目、任务和知识候选；不直接写入宿主事实。
+  when_not_to_use:
+  - 未提供已授权的 MailHub message_id
+  - 需要直接修改项目、知识库或发送邮件
+  handler: mailhub_agentctl_handlers:mail_message_analyze
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - message_id
+    properties:
+      message_id:
+        type: string
+        format: uuid
+  output_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - analysis
+    - evidence
+    properties:
+      analysis:
+        type: object
+      evidence:
+        type: object
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes:
+  - ca.mail.read
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  smoke:
+    query: 分析指定邮件并返回项目、任务和知识候选
+    arguments:
+      message_id: 00000000-0000-0000-0000-000000000001
+  metadata:
+    output_class: proposal
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.sync.enqueue
+  version: 1.0.0
+  title: 排队邮件同步与有界回填
+  description: 在授权连接上创建幂等、可恢复的 MailHub 同步或有界 backfill 作业；Agent 不直接调用 Provider。
+  when_not_to_use:
+  - 未提供已授权的 MailHub connection_id
+  - 需要立即把同步结果当作已完成事实
+  handler: mailhub_agentctl_handlers:mail_sync_enqueue
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [connection_id]
+    properties:
+      connection_id: {type: string, format: uuid}
+      mode: {type: string, enum: [incremental, backfill, reconcile]}
+      limit: {type: integer, minimum: 1, maximum: 500}
+      folder_ref: {type: string, minLength: 1, maxLength: 200}
+      label_refs:
+        type: array
+        maxItems: 20
+        items: {type: string, minLength: 1, maxLength: 200}
+      received_after: {type: string, format: date-time}
+      received_before: {type: string, format: date-time}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [job, evidence]
+  result_object_types: [job_ref, evidence_ref]
+  side_effect_class: internal
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [ca.mail.read]
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: durable_sync_job
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.autonomy.enqueue
+  version: 1.0.0
+  title: 排队邮件自主建议运行
+  description: 在授权连接上创建幂等、可暂停、可重放的 MailHub recommend-only 运行；只生成摘要与候选，不直接写项目、知识或发送邮件。
+  when_not_to_use:
+  - 未提供已授权的 MailHub connection_id
+  - 需要把候选直接当成宿主事实或执行外发
+  handler: mailhub_agentctl_handlers:mail_autonomy_enqueue
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [connection_id, replay_key]
+    properties:
+      connection_id: {type: string, format: uuid}
+      replay_key: {type: string, minLength: 1, maxLength: 200}
+      limit: {type: integer, minimum: 1, maximum: 500}
+      message_limit: {type: integer, minimum: 1, maximum: 200}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [job, mode, evidence]
+  result_object_types: [job_ref, evidence_ref]
+  side_effect_class: internal
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [ca.mail.autonomy]
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: durable_autonomy_run
+    mode: recommend_only
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.rule.execute
+  version: 1.0.0
+  title: 执行受控邮件整理规则
+  description: 对已授权邮件运行规则 dry-run 或受 Kill Switch/策略/委托/配额约束的 L3A 标签、归档、已读动作；不支持发送、项目写入或知识发布。
+  when_not_to_use:
+  - 规则尚未发布或不是 L3A 低风险动作
+  - 未提供 policy_id/grant_id 进行真实执行
+  - 需要发送邮件、写入项目或发布组织知识
+  handler: mailhub_agentctl_handlers:mail_rule_execute
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [rule_id, message_ids]
+    properties:
+      rule_id: {type: string, format: uuid}
+      message_ids:
+        type: array
+        minItems: 1
+        maxItems: 100
+        uniqueItems: true
+        items: {type: string, format: uuid}
+      policy_id: {type: [string, 'null'], format: uuid}
+      grant_id: {type: [string, 'null'], format: uuid}
+      dry_run: {type: boolean}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [executions, evidence]
+    properties:
+      executions: {type: array, maxItems: 100}
+      evidence: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes: [ca.mail.rule]
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  rollback:
+    strategy: host_provider_compensation_or_manual_review
+    owner: caplatform-product-team
+  metadata:
+    output_class: governed_rule_execution
+    authoritative_decision: false
+    l3a_feature_flag_required: true
+    pilot_only: true
+- capability_id: ca.mail.candidate.review
+  version: 1.0.0
+  title: 审核邮件候选
+  description: 对 MailHub 候选执行显式批准或拒绝，并绑定 revision，避免过期结果被写入。
+  handler: mailhub_agentctl_handlers:mail_candidate_review
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - candidate_id
+    - approved
+    - expected_revision
+    properties:
+      candidate_id:
+        type: string
+        format: uuid
+      approved:
+        type: boolean
+      expected_revision:
+        type: integer
+        minimum: 1
+      review_reason:
+        type: string
+        minLength: 1
+        maxLength: 500
+  output_schema:
+    type: object
+    additionalProperties: false
+  result_object_types:
+  - evidence_ref
+  side_effect_class: internal
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes:
+  - ca.mail.review
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: proposal
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.candidate.apply
+  version: 1.0.0
+  title: 应用已批准邮件候选
+  description: 将已批准的候选提交给宿主项目或知识权威；MailHub 不绕过宿主事实所有权。
+  handler: mailhub_agentctl_handlers:mail_candidate_apply
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - candidate_id
+    - approval_ref
+    properties:
+      candidate_id:
+        type: string
+        format: uuid
+      approval_ref:
+        type: string
+        minLength: 1
+        maxLength: 512
+  output_schema:
+    type: object
+    additionalProperties: false
+  result_object_types:
+  - evidence_ref
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D2
+  required_scopes:
+  - ca.mail.apply
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  rollback:
+    strategy: host_revoke_or_compensating_action
+    owner: caplatform-product-team
+  metadata:
+    output_class: proposal
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.reply.draft
+  version: 1.0.0
+  title: 创建邮件回复草稿
+  description: 创建带 recipient/content digest 的 MailHub 草稿，不发送邮件。
+  handler: mailhub_agentctl_handlers:mail_reply_draft
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - connection_id
+    - recipient_addresses
+    - subject
+    - body_text
+    properties:
+      connection_id:
+        type: string
+        format: uuid
+      thread_id:
+        type:
+        - string
+        - 'null'
+        format: uuid
+      recipient_addresses:
+        type: array
+        minItems: 1
+        maxItems: 50
+        items:
+          type: string
+          format: email
+      cc_addresses:
+        type: array
+        maxItems: 50
+        items:
+          type: string
+          format: email
+      bcc_addresses:
+        type: array
+        maxItems: 50
+        items:
+          type: string
+          format: email
+      attachment_refs:
+        type: array
+        maxItems: 20
+        items:
+          type: string
+          minLength: 1
+          maxLength: 1000
+      subject:
+        type: string
+        minLength: 1
+        maxLength: 1000
+      body_text:
+        type: string
+        minLength: 1
+        maxLength: 200000
+  output_schema:
+    type: object
+    additionalProperties: false
+  result_object_types:
+  - evidence_ref
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes:
+  - ca.mail.draft
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    output_class: draft
+    authoritative_decision: false
+    pilot_only: true
+- capability_id: ca.mail.reply.send
+  version: 1.0.0
+  title: 发送已确认邮件回复
+  description: 通过 MailHub durable outbox 发送已确认草稿；失败、重试和 outcome unknown 均显式返回。
+  when_not_to_use:
+  - 首次联系、收件人扩大、群发、附件、金额、合同、法律或认证事务邮件
+  handler: mailhub_agentctl_handlers:mail_reply_send
+  input_schema:
+    type: object
+    additionalProperties: false
+    required:
+    - draft_id
+    - expected_revision
+    - expected_content_sha256
+    - expected_recipient_digest
+    - confirmation_ref
+    properties:
+      draft_id:
+        type: string
+        format: uuid
+      expected_revision:
+        type: integer
+        minimum: 1
+      expected_content_sha256:
+        type: string
+        pattern: '^[0-9a-fA-F]{64}$'
+      expected_recipient_digest:
+        type: string
+        pattern: '^[0-9a-fA-F]{64}$'
+      confirmation_ref:
+        type: string
+        minLength: 1
+        maxLength: 512
+      policy_id:
+        type:
+        - string
+        - 'null'
+        format: uuid
+      grant_id:
+        type:
+        - string
+        - 'null'
+        format: uuid
+      agent_subject_id:
+        type:
+        - string
+        - 'null'
+  output_schema:
+    type: object
+    additionalProperties: false
+  result_object_types:
+  - evidence_ref
+  side_effect_class: external
+  risk_level: R3
+  data_sensitivity: D3
+  required_scopes:
+  - ca.mail.send
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  rollback:
+    strategy: no_automatic_recall_manual_reconciliation
+    owner: caplatform-product-team
+  metadata:
+    output_class: outbox_operation
+    authoritative_decision: false
+    l3b_feature_flag_required: true
+    pilot_only: true
+- capability_id: ca.document.parse
+  version: 1.0.0
+  title: 异步解析平台文件
+  description: 从 Platform Core 权威云盘引用提交 JXZTtool/ParseCore 持久解析作业，返回稳定 job_ref；排队和运行中均不是完成。
+  when_to_use:
+  - 用户要求解析已上传到平台云盘的 PDF、Office、图片、表格或文本文件
+  - 长文档、大 PDF 或需要 OCR、结构化、Reader/IR 投影的文件
+  when_not_to_use:
+  - 文件尚未进入 Platform Core 云盘
+  - 只需处理已存在的结构化 ParseCore 投影
+  handler: parsecore_agentctl_handlers:document_parse_submit
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [storage_object_id]
+    properties:
+      storage_object_id: {type: string, minLength: 1, maxLength: 160}
+      doc_id: {type: [string, 'null'], maxLength: 120}
+      profile: {type: string, enum: [auto, default, table-heavy, scanned-pdf, large-pdf]}
+      enable_ocr: {type: boolean}
+      quota_units: {type: integer, minimum: 1, maximum: 10000}
+      purpose: {type: string, maxLength: 160}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [job_ref, document_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      document_ref: {type: object}
+      evidence_ref: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: internal
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [document.parse]
+  confirmation_policy: explicit
+  async_mode: job
+  job_lifecycle:
+    role: submit
+    status_capability_id: ca.document.parse.status
+    cancel_capability_id: ca.document.parse.cancel
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  compact_input_summary:
+    required: [storage_object_id]
+  compact_output_summary:
+    result_object_types: [job_ref, artifact_ref, evidence_ref]
+  metadata:
+    output_class: durable_parse_job
+    authoritative_decision: false
+    asset_owner: platform-core
+    job_owner: parsecore
+    implementation: JXZTtool
+- capability_id: ca.document.parse.status
+  version: 1.0.0
+  title: 查询文档解析状态
+  description: 通过 Platform Core 租户边界查询 ParseCore 权威作业状态；queued/running 显式保持 pending。
+  handler: parsecore_agentctl_handlers:document_parse_status
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [job_id]
+    properties:
+      job_id: {type: string, minLength: 1, maxLength: 160}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [job_ref, document_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      document_ref: {type: object}
+      evidence_ref: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D2
+  required_scopes: [document.read]
+  confirmation_policy: none
+  async_mode: job
+  job_lifecycle:
+    role: status
+- capability_id: ca.document.parse.cancel
+  version: 1.0.0
+  title: 取消文档解析作业
+  description: 在 Platform Core 校验租户和产品归属后取消尚未完成的 ParseCore 作业。
+  handler: parsecore_agentctl_handlers:document_parse_cancel
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [job_id]
+    properties:
+      job_id: {type: string, minLength: 1, maxLength: 160}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [job_ref, document_ref, evidence_ref]
+    properties:
+      job_ref: {type: object}
+      document_ref: {type: object}
+      evidence_ref: {type: object}
+  result_object_types: [job_ref, artifact_ref, evidence_ref]
+  side_effect_class: internal
+  risk_level: R1
+  data_sensitivity: D2
+  required_scopes: [document.parse]
+  confirmation_policy: explicit
+  async_mode: job
+  job_lifecycle:
+    role: cancel
+- capability_id: ca.document.projection.read
+  version: 1.0.0
+  title: 读取文档结构化投影
+  description: 读取 JXZTtool 版本化 compat、structured、Reader、IR 或 Coverage 投影，不暴露内部文件路径和凭据。
+  handler: parsecore_agentctl_handlers:document_projection_read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [doc_id]
+    properties:
+      doc_id: {type: string, minLength: 1, maxLength: 160}
+      projection: {type: string, enum: [compat, structured, reader, ir, coverage]}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [artifact_ref, evidence_ref]
+    properties:
+      artifact_ref: {type: object}
+      evidence_ref: {type: object}
+  result_object_types: [artifact_ref, evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D2
+  required_scopes: [document.read]
+  confirmation_policy: none
+  metadata:
+    contract_family: JXZTtool KnowledgeUnit v1
+    preferred_human_view: reader
+    preferred_deep_integration_view: ir
+- capability_id: ca.document.diagnostics.read
+  version: 1.0.0
+  title: 检查文档解析质量
+  description: 读取质量信号、RAG 覆盖缺口或 Provider 路由诊断；质量门为 warn/fail 时不得宣称文档已完整可用。
+  handler: parsecore_agentctl_handlers:document_diagnostics_read
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [doc_id, view]
+    properties:
+      doc_id: {type: string, minLength: 1, maxLength: 160}
+      view: {type: string, enum: [quality, coverage, providers]}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [artifact_ref, evidence_ref]
+    properties:
+      artifact_ref: {type: object}
+      evidence_ref: {type: object}
+  result_object_types: [artifact_ref, evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D2
+  required_scopes: [document.read]
+  confirmation_policy: none
+- capability_id: ca.document.search
+  version: 1.0.0
+  title: 检索已解析文档
+  description: 在租户隔离的 ParseCore 文档索引内检索证据单元，可按主索引或高精度索引执行。
+  handler: parsecore_agentctl_handlers:document_search
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [doc_id, query]
+    properties:
+      doc_id: {type: string, minLength: 1, maxLength: 160}
+      query: {type: string, minLength: 1, maxLength: 4000}
+      limit: {type: integer, minimum: 1, maximum: 50}
+      index_layer: {type: string, enum: [primary, high_precision]}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [search_result, evidence_ref]
+    properties:
+      search_result: {type: object}
+      evidence_ref: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D2
+  required_scopes: [document.search]
+  confirmation_policy: none
+- capability_id: ca.collaboration.document.search
+  version: 1.0.0
+  title: 搜索已授权协作文档
+  description: 通过已复核发布的绑定搜索当前租户可访问的协作文档，并返回稳定引用。
+  when_to_use:
+  - 用户要在已连接的钉钉或飞书文档中搜索标题或内容
+  when_not_to_use:
+  - 用户要求读取未授权空间、修改文档或直接发布内容
+  handler: mcp_integration_agentctl_handlers:collaboration_document_search
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [published_binding_id, arguments]
+    properties:
+      published_binding_id: {type: string, minLength: 1, maxLength: 200}
+      arguments:
+        type: object
+        additionalProperties: false
+        required: [query]
+        properties:
+          query: {type: string, minLength: 1, maxLength: 500}
+          cursor: {type: [string, 'null'], maxLength: 1000}
+          limit: {type: integer, minimum: 1, maximum: 100}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [invocation, result, evidence]
+    properties:
+      invocation: {type: object}
+      result:
+        type: object
+        additionalProperties: false
+        required: [items, next_cursor]
+        properties:
+          items:
+            type: array
+            maxItems: 100
+            items:
+              type: object
+              additionalProperties: false
+              required: [provider, object_ref, title]
+              properties:
+                provider: {type: string, minLength: 1}
+                object_ref: {type: string, minLength: 1}
+                title: {type: string, minLength: 1, maxLength: 500}
+                url: {type: [string, 'null'], format: uri}
+                updated_at: {type: [string, 'null'], format: date-time}
+          next_cursor: {type: [string, 'null']}
+      evidence: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: none
+  risk_level: R1
+  data_sensitivity: D1
+  required_scopes: [collaboration.document.search]
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    operation_key: collaboration.document.search
+    mcp_binding_required: true
+    pilot_only: true
+- capability_id: ca.collaboration.task.list
+  version: 1.0.0
+  title: 列出已授权协作待办
+  description: 通过已复核发布的绑定列出当前主体可访问的协作待办，不执行任何写操作。
+  when_to_use:
+  - 用户要查看本人或当前授权范围内的协作待办
+  when_not_to_use:
+  - 用户要求创建、完成、转派或删除待办
+  handler: mcp_integration_agentctl_handlers:collaboration_task_list
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [published_binding_id, arguments]
+    properties:
+      published_binding_id: {type: string, minLength: 1, maxLength: 200}
+      arguments:
+        type: object
+        additionalProperties: false
+        properties:
+          status: {type: string, enum: [open, completed, all]}
+          cursor: {type: [string, 'null'], maxLength: 1000}
+          limit: {type: integer, minimum: 1, maximum: 100}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [invocation, result, evidence]
+    properties:
+      invocation: {type: object}
+      result:
+        type: object
+        additionalProperties: false
+        required: [items, next_cursor]
+        properties:
+          items:
+            type: array
+            maxItems: 100
+            items:
+              type: object
+              additionalProperties: false
+              required: [task_ref, title, status]
+              properties:
+                task_ref: {type: string, minLength: 1}
+                title: {type: string, minLength: 1, maxLength: 500}
+                status: {type: string, enum: [open, completed]}
+                due_at: {type: [string, 'null'], format: date-time}
+          next_cursor: {type: [string, 'null']}
+      evidence: {type: object}
+  result_object_types: [evidence_ref]
+  side_effect_class: none
+  risk_level: R0
+  data_sensitivity: D1
+  required_scopes: [collaboration.task.list]
+  confirmation_policy: none
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    operation_key: collaboration.task.list
+    mcp_binding_required: true
+    pilot_only: true
+- capability_id: ca.collaboration.task.create
+  version: 1.0.0
+  title: 创建已审批的协作待办
+  description: 通过已复核发布的 R2 绑定创建一条待办；不发送消息、不发布文档、不扩大共享权限。
+  when_to_use:
+  - 用户明确要求在已连接 Provider 中创建待办，且目标、负责人、关键字段已展示并获批
+  when_not_to_use:
+  - 用户要求自动发送消息、批量创建、发布文档、改变权限或绕过审批
+  handler: mcp_integration_agentctl_handlers:collaboration_task_create
+  input_schema:
+    type: object
+    additionalProperties: false
+    required: [published_binding_id, arguments]
+    properties:
+      published_binding_id: {type: string, minLength: 1, maxLength: 200}
+      arguments:
+        type: object
+        additionalProperties: false
+        required: [title, assignee_ref]
+        properties:
+          title: {type: string, minLength: 1, maxLength: 500}
+          description: {type: [string, 'null'], maxLength: 10000}
+          assignee_ref: {type: string, minLength: 1, maxLength: 500}
+          due_at: {type: [string, 'null'], format: date-time}
+  output_schema:
+    type: object
+    additionalProperties: false
+    required: [invocation, result, evidence]
+    properties:
+      invocation: {type: object}
+      result:
+        type: object
+        additionalProperties: false
+        required: [task_ref, receipt_ref]
+        properties:
+          task_ref: {type: string, minLength: 1}
+          receipt_ref: {type: string, minLength: 1}
+      evidence: {type: object}
+  result_object_types: [task_ref, evidence_ref]
+  side_effect_class: external
+  risk_level: R2
+  data_sensitivity: D1
+  required_scopes: [collaboration.task.create]
+  confirmation_policy: explicit
+  idempotency:
+    required: true
+    scope: tenant_actor_capability
+  metadata:
+    operation_key: collaboration.task.create
+    mcp_binding_required: true
+    write_feature_flag: MCP_COLLABORATION_WRITE_ENABLED
+    pilot_only: true

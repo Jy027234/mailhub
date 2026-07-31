@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS mail_action_candidates;
+DROP TABLE IF EXISTS mail_audit_events;
+DROP TABLE IF EXISTS mail_outbox_operations;
+DROP TABLE IF EXISTS mail_drafts;
+DROP TABLE IF EXISTS mail_delegation_grants;
+DROP TABLE IF EXISTS mail_agent_policies;
+DROP TABLE IF EXISTS mail_sync_cursors;
+DROP TABLE IF EXISTS mail_messages;
+DROP TABLE IF EXISTS mail_threads;
+DROP TABLE IF EXISTS mail_connections;

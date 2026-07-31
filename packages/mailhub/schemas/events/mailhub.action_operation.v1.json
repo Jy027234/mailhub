@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mailhub.invalid/schemas/events/mailhub.action_operation.v1.json",
+  "title": "MailHub action operation event v1",
+  "allOf": [
+    {"$ref": "mailhub.event_envelope.v1.json"},
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {"const": "mailhub.action_operation.v1"},
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "status", "idempotency_key"],
+          "properties": {
+            "operation_id": {"type": "string", "format": "uuid"},
+            "status": {"type": "string"},
+            "idempotency_key": {"type": "string", "minLength": 1},
+            "provider_message_ref": {"type": ["string", "null"]},
+            "provider_request_id": {"type": ["string", "null"]},
+            "error_code": {"type": ["string", "null"]},
+            "outcome_unknown": {"type": "boolean"}
+          }
+        }
+      }
+    }
+  ]
+}

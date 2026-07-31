@@ -1,0 +1,58 @@
+schema_version: mailhub.provider_compatibility.v1
+reviewed_at: 2026-07-29
+policy:
+  real_provider_evidence_required_for_advertisement: true
+  sandbox_is_not_production_evidence: true
+providers:
+  sandbox:
+    status: contract_only
+    connector: mailhub.connectors.sandbox.SandboxConnector
+    capabilities: [incremental_sync, backfill, deterministic_replay]
+    evidence: tests/test_connectors.py
+  gmail:
+    status: preflight_m2
+    connector: mailhub.connectors.http_providers.GmailConnector
+    capabilities: [history_cursor, bounded_backfill, metadata_projection]
+    evidence: [tests/test_connectors.py, tests/test_notifications.py, tests/test_host_adapters.py, tests/test_subscriptions.py, tests/test_provider_activation.py, migrations/0013_mailhub_subscription_state.sql, migrations/0014_mailhub_provider_metadata.sql, migrations/0015_mailhub_webhook_route_metadata.sql, migrations/0016_mailhub_connection_identity.sql, migrations/0017_mailhub_sync_filters.sql, migrations/0018_mailhub_sync_deleted_count.sql, migrations/0019_mailhub_sync_cancelling.sql, migrations/0020_mailhub_message_recipient_headers.sql, migrations/0021_mailhub_sync_retry.sql]
+    activation_runner: scripts/run_provider_activation.py
+    activation_runbook: docs/mailhub-provider-activation-runbook.md
+    notification_parser: mailhub.notifications.parse_gmail_pubsub_notification
+    subscription_port: mailhub.ports.ProviderSubscriptionPort
+    required_scopes: [https://www.googleapis.com/auth/gmail.readonly]
+    official_references:
+      - https://developers.google.com/workspace/gmail/api/guides/sync
+      - https://developers.google.com/workspace/gmail/api/guides/push
+      - https://developers.google.com/workspace/gmail/api/auth/scopes
+    restrictions:
+      - real_oauth_and_mailbox_acceptance_required
+      - watch_pubsub_and_reconciliation_not_claimed
+      - provider_search_contract_not_enabled
+      - read_only_send_gate_default_true
+  microsoft_graph:
+    status: preflight_m3
+    connector: mailhub.connectors.http_providers.MicrosoftGraphConnector
+    capabilities: [delta_cursor, bounded_backfill, metadata_projection]
+    evidence: [tests/test_connectors.py, tests/test_notifications.py, tests/test_host_adapters.py, tests/test_subscriptions.py, tests/test_provider_activation.py, migrations/0013_mailhub_subscription_state.sql, migrations/0014_mailhub_provider_metadata.sql, migrations/0015_mailhub_webhook_route_metadata.sql, migrations/0016_mailhub_connection_identity.sql, migrations/0017_mailhub_sync_filters.sql, migrations/0018_mailhub_sync_deleted_count.sql, migrations/0019_mailhub_sync_cancelling.sql, migrations/0020_mailhub_message_recipient_headers.sql, migrations/0021_mailhub_sync_retry.sql]
+    activation_runner: scripts/run_provider_activation.py
+    activation_runbook: docs/mailhub-provider-activation-runbook.md
+    notification_parser: mailhub.notifications.parse_graph_change_notifications
+    subscription_port: mailhub.ports.ProviderSubscriptionPort
+    required_scopes: [Mail.Read, offline_access]
+    official_references:
+      - https://learn.microsoft.com/en-us/graph/auth-v2-user
+      - https://learn.microsoft.com/en-us/graph/delta-query-messages
+      - https://learn.microsoft.com/en-us/graph/outlook-change-notifications-overview
+    restrictions:
+      - real_oauth_and_mailbox_acceptance_required
+      - change_notifications_and_reconciliation_not_claimed
+      - free_form_labels_rejected; use category:Name for bounded Graph categories
+      - provider_search_contract_not_enabled
+      - read_only_send_gate_default_true
+  imap_smtp:
+    status: contract_only
+    connector: mailhub.connectors.imap_smtp.ImapSmtpConnector
+    capabilities: [tls, xoauth2_or_application_password, uidvalidity_cursor, modseq_cursor, smtp_outbox]
+    evidence: tests/test_connectors.py
+    restrictions:
+      - server_matrix_and_idle_compatibility_not_claimed
+      - smtp_send_disabled_by_default

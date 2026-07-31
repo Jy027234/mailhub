@@ -1,0 +1,75 @@
+schema_version: mailhub.source_ledger.v1
+module: mailhub
+entries:
+  - entry_id: mailhub-core-owned
+    reuse_level: A
+    source_kind: new
+    source_path: packages/mailhub/src/mailhub
+    status: approved
+    license_verified: true
+  - entry_id: caactraining-reference-only
+    reuse_level: C
+    source_repo: Jy027234/CAACTRAINING
+    source_commit: 81139e95489b4659f970a7b8c030dd77e308c283
+    source_paths:
+      - services/api/src/aviation_training/application/test_mailbox_delivery.py
+      - services/api/src/aviation_training/application/outreach_ports.py
+      - services/api/src/aviation_training/application/outreach_service.py
+      - services/api/src/aviation_training/domain/outreach.py
+      - tests/unit/test_test_mailbox_delivery.py
+      - tests/unit/test_test_mailbox_outreach_service.py
+    status: not_imported
+    license_verified: false
+    target_paths:
+      - packages/mailhub/tests/test_service.py
+      - packages/mailhub/tests/test_outbox_recovery.py
+      - packages/mailhub/tests/test_rule_execution.py
+      - packages/mailhub/tests/test_worker_lease_recovery.py
+    reimplemented_scenarios:
+      - completed_replay_and_bounded_backoff
+      - crash_after_provider_accept_and_outcome_reconciliation
+      - kill_switch_and_dead_letter_boundaries
+    notes: Repository is private at the reviewed commit; behavior and contract reference only; no source code copied into MailHub. Recovery tests are clean-room reimplementations with MailHub types and fixtures.
+  - entry_id: aerolink-reference-only
+    reuse_level: C
+    source_repo: Jy027234/AeroLink
+    source_commit: 1ad350f2ada2a54b14d4036f20c47f5ccdb56bd1
+    source_paths:
+      - server/src/lib/emailService.ts
+      - server/src/lib/inboundEmailSyncService.ts
+      - server/src/lib/inboundEmailSyncService.test.ts
+      - server/src/lib/outboxService.ts
+      - server/src/worker.ts
+      - server/src/routes/emailAccounts.ts
+      - server/src/routes/emailSync.ts
+      - server/src/routes/emails.ts
+      - server/prisma/schema.prisma
+    status: not_imported
+    license_verified: false
+    target_paths:
+      - packages/mailhub/tests/test_connectors.py
+      - packages/mailhub/tests/test_service.py
+      - packages/mailhub/tests/test_worker_lease_recovery.py
+    reimplemented_scenarios:
+      - cursor_commit_and_replay_idempotency
+      - provider_failure_preserves_cursor_and_schedules_retry
+      - lease_fencing_and_concurrent_worker_recovery
+    notes: Public repository at the reviewed commit; transport/outbox behavior reference only; host business logic remains outside MailHub core. Recovery tests are clean-room reimplementations; host business logic remains outside MailHub core.
+  - entry_id: mail0-product-reference-only
+    reuse_level: C
+    source_kind: product_reference
+    source_repo: Mail-0/Zero
+    source_commit: 64c5480c341750578da0746f2db9ad84da686334
+    source_paths: []
+    status: not_imported
+    license_verified: false
+    notes: Product/driver interaction reference only; no Mail0 source, identity, database, AI runtime or provider code is included.
+  - entry_id: inbox-zero-product-reference-only
+    reuse_level: C
+    source_kind: product_reference
+    source_repo: elie222/inbox-zero
+    source_commit: 15f67f610ea0415834c940b60abd07d33c968f6f
+    source_paths: []
+    status: not_imported
+    license_verified: false
+    notes: UX/product reference only; no source is included and its commercial/enterprise restrictions are not used as a code base.

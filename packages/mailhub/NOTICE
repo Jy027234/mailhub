@@ -1,0 +1,11 @@
+MailHub is part of the CAPlatform proprietary repository and is distributed
+under the package-level LICENSE in this directory.
+
+Copyright (c) 2026 CAPlatform contributors. All rights reserved. See the
+repository-root LICENSE for the governing terms. No CAACTRAINING, AeroLink,
+Mail0, Inbox Zero, n8n, Activepieces or other application source files are
+included in this package; those repositories are recorded as behavior or
+contract references in source-ledger.yaml only.
+
+Release artifacts must attach the generated SBOM, image provenance and the
+approved source-ledger revision before distribution.

@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mailhub.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mailhub.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "mailhub.name" . }}
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}@{{ required \"values.image.digest must be an immutable release digest\" .Values.image.digest }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: MAILHUB_ENV
+              value: production
+            - name: MAILHUB_ALLOW_SANDBOX
+              value: "false"
+            - name: MAILHUB_OUTBOUND_ENABLED
+              value: {{ .Values.outboundEnabled | quote }}
+            - name: MAILHUB_JOB_LEASE_SECONDS
+              value: {{ .Values.jobLeaseSeconds | quote }}
+            - name: MAILHUB_GMAIL_ENABLED
+              value: "false"
+            - name: MAILHUB_MICROSOFT_GRAPH_ENABLED
+              value: "false"
+            - name: MAILHUB_RULE_AUTOMATION_ENABLED
+              value: {{ .Values.ruleAutomationEnabled | quote }}
+            - name: MAILHUB_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.databaseUrl }}
+            - name: MAILHUB_KMS_KEY_REF
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.kmsKeyRef }}
+            - name: MAILHUB_OBJECT_STORE_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.objectStoreEndpoint }}
+            - name: MAILHUB_AV_SCANNER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.avScannerEndpoint }}
+            - name: MAILHUB_DLP_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.dlpEndpoint }}
+            - name: MAILHUB_CREDENTIAL_BROKER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.credentialBrokerEndpoint }}
+            - name: MAILHUB_HOST_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.hostServiceToken }}
+            - name: MAILHUB_HOST_IDENTITY_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.hostIdentityEndpoint }}
+            - name: MAILHUB_APPROVAL_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.approvalEndpoint }}
+            - name: MAILHUB_AI_EXECUTION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.aiExecutionEndpoint }}
+            - name: MAILHUB_HOST_ACTION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.hostActionEndpoint }}
+            - name: MAILHUB_KNOWLEDGE_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.knowledgeEndpoint }}
+            - name: MAILHUB_AGENT_MEMORY_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.agentMemoryEndpoint }}
+            - name: MAILHUB_EVENT_PUBLISHER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.eventPublisherEndpoint }}
+            - name: MAILHUB_TELEMETRY_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.telemetryEndpoint }}
+            - name: MAILHUB_QUOTA_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.quotaEndpoint }}
+            - name: MAILHUB_PROVIDER_SUBSCRIPTION_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.providerSubscriptionEndpoint }}
+            - name: MAILHUB_PROVIDER_NOTIFICATION_VERIFIER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.providerNotificationVerifierEndpoint }}
+                  optional: true
+            - name: MAILHUB_KILL_SWITCH_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalSecret.name }}
+                  key: {{ .Values.externalSecret.keys.killSwitchEndpoint }}
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
