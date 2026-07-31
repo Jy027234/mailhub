@@ -33,3 +33,10 @@
 python -m pip install -e ".[dev]"
 pwsh -NoProfile -File scripts/verify.ps1
 ```
+
+## 本次归档验证
+
+- Python 源码编译检查通过。
+- 导入边界、秘密扫描、来源台账和许可证门禁通过。
+- `config/domain/security/connectors` 核心分片共 58 项测试通过。
+- 全量测试在本机静默运行约八分钟后人工终止，未取得完整通过结论；后续独立开发应在 CI 中重新运行完整 `pytest`。
