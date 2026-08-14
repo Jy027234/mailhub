@@ -611,6 +611,20 @@ def _provider_error_details(
     return details
 
 
+def _gmail_internal_date(value: Mapping[str, Any]) -> datetime | None:
+    # Gmail `internalDate` is epoch milliseconds and is the authoritative
+    # received timestamp for a message resource.  Prefer it over the RFC 5322
+    # Date header so backfill filters and thread ordering never depend on a
+    # sender-controlled header.
+    internal = value.get("internalDate")
+    if not isinstance(internal, str) or not internal.isdigit():
+        return None
+    try:
+        return datetime.fromtimestamp(int(internal) / 1000, tz=UTC)
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
 def _gmail_message(value: Mapping[str, Any]) -> ProviderMessage:
     raw_payload = value.get("payload")
     payload: Mapping[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
@@ -642,7 +656,7 @@ def _gmail_message(value: Mapping[str, Any]) -> ProviderMessage:
         sender_address=sender,
         recipient_addresses=recipients,
         subject=headers.get("subject", "(no subject)")[:1000],
-        received_at=_parse_datetime(headers.get("date")),
+        received_at=_gmail_internal_date(value) or _parse_datetime(headers.get("date")),
         body_text=body,
         body_object_ref=None,
         content_sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
@@ -1018,7 +1032,17 @@ def _parse_datetime(value: str | None) -> datetime:
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
     except ValueError:
+        pass
+    # Gmail Date headers are RFC 5322 ("Wed, 01 Jul 2026 00:00:00 +0000"),
+    # not ISO-8601.  Parsing them as ISO would silently fall back to now()
+    # and corrupt durable received_at projections and backfill date filters.
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
         return datetime.now(UTC)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _string_or_none(value: Any) -> str | None:

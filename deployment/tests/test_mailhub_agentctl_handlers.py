@@ -2,19 +2,18 @@ import asyncio
 import json
 
 import pytest
-
 from mailhub_agentctl_handlers import (
     MailHubHandlerError,
+    _sync_job_filter,
+    mail_autonomy_enqueue,
     mail_connection_list,
     mail_message_analyze,
     mail_message_search,
-    mail_thread_list,
-    mail_autonomy_enqueue,
     mail_reply_draft,
     mail_reply_send,
     mail_rule_execute,
     mail_sync_enqueue,
-    _sync_job_filter,
+    mail_thread_list,
 )
 
 

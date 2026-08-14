@@ -24,7 +24,9 @@ from mailhub.connectors.http_providers import (
     MicrosoftGraphConnector,
     _email_message,
     _get_json,
+    _gmail_message,
     _graph_backfill_filter,
+    _parse_datetime,
     _response_json,
     _safe_graph_cursor,
 )
@@ -347,6 +349,42 @@ async def test_gmail_backfill_filter_is_translated_to_safe_query(
     assert 'label:"Project"' in query
     assert "after:" in query and "before:" in query
     assert [message.provider_message_ref for message in page.messages] == ["m-filter"]
+
+
+def test_parse_datetime_accepts_rfc5322_gmail_date_headers() -> None:
+    # Gmail Date headers are RFC 5322, not ISO-8601.  A regression here guards
+    # against the silent now() fallback corrupting durable received_at
+    # projections and backfill date filters.
+    assert _parse_datetime("Wed, 01 Jul 2026 00:00:00 +0000") == datetime(2026, 7, 1, tzinfo=UTC)
+    assert _parse_datetime("Mon, 20 Jul 2026 10:30:00 -0700") == datetime(
+        2026, 7, 20, 17, 30, tzinfo=UTC
+    )
+    assert _parse_datetime("2026-07-01T00:00:00Z") == datetime(2026, 7, 1, tzinfo=UTC)
+
+
+def test_gmail_message_prefers_internal_date_over_date_header() -> None:
+    received = datetime(2026, 7, 1, tzinfo=UTC)
+    message = _gmail_message(
+        {
+            "id": "m-internal",
+            "threadId": "t-internal",
+            "internalDate": str(int(received.timestamp() * 1000)),
+            "labelIds": ["INBOX"],
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "sender@example.test"},
+                    {"name": "To", "value": "user@example.test"},
+                    {"name": "Subject", "value": "Internal date wins"},
+                    # A deliberately different RFC 5322 value: the authoritative
+                    # internalDate must win over the header.
+                    {"name": "Date", "value": "Wed, 08 Jul 2026 00:00:00 +0000"},
+                ],
+                "mimeType": "text/plain",
+                "body": {"data": "SGVsbG8="},
+            },
+        }
+    )
+    assert message.received_at == received
 
 
 @pytest.mark.asyncio

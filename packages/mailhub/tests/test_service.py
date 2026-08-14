@@ -390,7 +390,9 @@ async def test_provider_lifecycle_reauthorization_fences_connection_and_subscrip
         connection_id=connection.connection_id,
         expected_revision=connection.revision,
     )
-    now = datetime(2026, 7, 29, 12, tzinfo=UTC)
+    # Relative clock: a fixed expiry like "2026-07-29 + 7d" goes stale and
+    # the durable validation then correctly rejects the past expiry.
+    now = datetime.now(UTC)
     await service.ensure_provider_subscription(
         tenant_id=connection.tenant_id,
         subject_id=connection.subject_id,
