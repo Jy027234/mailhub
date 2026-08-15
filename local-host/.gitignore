@@ -1,0 +1,7 @@
+.env
+data/
+provider-activation/
+b4-state.json
+__pycache__/
+*.pyc
+.pytest_cache/

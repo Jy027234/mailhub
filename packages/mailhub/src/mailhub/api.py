@@ -2606,7 +2606,10 @@ def _oauth_registration_urls_allowed(
             or not parsed_redirect.path
             or parsed_redirect.username is not None
             or parsed_redirect.password is not None
-            or redirect_port is not None
+            # Explicit ports are allowed only for loopback development
+            # callbacks; public HTTPS registrations must use the canonical
+            # host/port form (same contract as A0 preflight and oauth.py).
+            or (redirect_port is not None and hostname not in {"localhost", "127.0.0.1", "::1"})
             or parsed_redirect.query
             or parsed_redirect.fragment
         ):

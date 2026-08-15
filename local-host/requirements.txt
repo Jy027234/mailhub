@@ -1,0 +1,2 @@
+-e ../packages/mailhub[postgres]
+cryptography>=42

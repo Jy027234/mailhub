@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
-from mailhub.api import _build_default_oauth, create_app
+from mailhub.api import _build_default_oauth, _oauth_registration_urls_allowed, create_app
 from mailhub.config import MailHubSettings
 from mailhub.connectors.http_providers import GmailConnector
 from mailhub.connectors.sandbox import SandboxConnector
@@ -1214,3 +1214,33 @@ def test_api_exposes_pauseable_autonomy_run_contract() -> None:
     assert completed.status_code == 200
     assert completed.json()["data"]["status"] == "completed"
     assert client.get("/v1/mail/autonomy/runs", headers=headers).json()["data"]
+
+
+def test_oauth_registration_allows_loopback_dev_ports_only() -> None:
+    endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
+    # Loopback development callbacks may bind an explicit port (documented
+    # A0/preflight contract); public HTTPS callbacks may not.
+    assert _oauth_registration_urls_allowed(
+        OAuthProvider.GMAIL,
+        endpoint,
+        ("http://127.0.0.1:8090/oauth/gmail/callback",),
+        None,
+    )
+    assert _oauth_registration_urls_allowed(
+        OAuthProvider.GMAIL,
+        endpoint,
+        ("http://localhost:3000/mail/callback",),
+        None,
+    )
+    assert not _oauth_registration_urls_allowed(
+        OAuthProvider.GMAIL,
+        endpoint,
+        ("https://app.example.test:8443/mail/callback",),
+        None,
+    )
+    assert _oauth_registration_urls_allowed(
+        OAuthProvider.GMAIL,
+        endpoint,
+        ("https://app.example.test/mail/callback",),
+        None,
+    )

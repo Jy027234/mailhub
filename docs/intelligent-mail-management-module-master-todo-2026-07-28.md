@@ -311,6 +311,21 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > 未配置则 fail closed；connector 不直接接收未经验证的 Provider callback。
 > 定时/拉取式只读同步保持 `push_enabled=false` 时，不要求这两类 endpoint。
 
+> **归档独立开发增量（2026-08-15，B4 工程准备）**：独立归档内完成三处缺陷修复并搭建
+> B4 本地激活宿主。修复：Gmail `Date` 头 RFC 5322 解析（此前静默回退 `now()` 污染
+> `received_at` 投影与 backfill 日期过滤，现优先 `internalDate`）；订阅测试的过期硬编码
+> fixture 改相对时钟；`_oauth_registration_urls_allowed` 此前拒绝 loopback 开发回调的显式
+> 端口，与 A0/`oauth.py` 合同矛盾，已对齐并加回归测试。MailHub 包全量门禁为
+> **336 tests**（+1 loopback 回归），ruff/format/strict mypy/import/secret/synthetic-eval/
+> migration/provenance/license 全绿。新增 `local-host/` 最小宿主：复用
+> `caplatform_bff.mailhub_credentials` 参考 broker，实现全部 `/v1/mail-host/*` 合同
+> （服务令牌认证、加密 SQLite 对象/事件/配额/审批账本、AI/AV/DLP fail-closed），
+> 10 个合同测试（含 MockTransport 下 broker 全生命周期：exchange→resolve→refresh→revoke）；
+> `docker compose`（postgres:16.4）+ 21 条迁移 + durable 图 E2E 验证
+> （`b4_smoke.py` 9/9：`/health/ready=ready`、Gmail connector 只读注册、连接创建/列表、
+> 删除 fail-closed）。以上均为本地工程证据；B4 勾选仍需隔离 Gmail 账号真实 OAuth 与
+> A1/A2 脱敏证据包，M2/M3 保持未勾选。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

@@ -9,3 +9,7 @@ dist/
 build/
 *.sqlite3
 *.db
+
+# DeepSeek Harness checkout lives inside the workspace but is not part of the
+# MailHub archive repository.
+deepseek-harness/

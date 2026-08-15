@@ -1,0 +1,531 @@
+"""SQLite-backed local stores for the MailHub host contract.
+
+Every store is deliberately bounded and local.  Object content is Fernet
+encrypted at rest, events/actions/knowledge rows are idempotent by the
+contract's idempotency keys, and quota leases are durable rows rather than
+process-local counters.  This remains a controlled local/Beta adapter, not a
+production host backend.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+from uuid import UUID, uuid4
+
+from cryptography.fernet import Fernet
+
+from mailhub.quota import QuotaLease
+
+
+class StoreError(RuntimeError):
+    def __init__(self, code: str, *, status_code: int = 400) -> None:
+        self.code = code
+        self.status_code = status_code
+        super().__init__(code)
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _token(bits: int = 128) -> str:
+    return secrets.token_urlsafe(bits // 8)
+
+
+def _digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS host_objects (
+    object_ref TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    purpose TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    encrypted_content BLOB NOT NULL,
+    expires_at TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_host_objects_owner ON host_objects(tenant_id, subject_id);
+CREATE TABLE IF NOT EXISTS host_events (
+    event_id TEXT PRIMARY KEY,
+    envelope_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_telemetry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    fields_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_approvals (
+    confirmation_ref TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    action_id TEXT NOT NULL,
+    action_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_actions (
+    idempotency_key TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    action_id TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_knowledge (
+    idempotency_key TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    candidate_id TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_knowledge_revocations (
+    request_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_quota_leases (
+    lease_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    account_id TEXT,
+    operation TEXT NOT NULL,
+    acquired_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_host_quota_scope ON host_quota_leases(
+    tenant_id, subject_id, account_id, operation
+);
+CREATE TABLE IF NOT EXISTS host_quota_usage (
+    scope_key TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    consumed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_host_quota_usage ON host_quota_usage(scope_key, operation, consumed_at);
+CREATE TABLE IF NOT EXISTS host_oauth_flows (
+    state TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class StoredObject:
+    tenant_id: str
+    subject_id: str
+    purpose: str
+    content: str
+    content_sha256: str
+    expires_at: datetime | None
+
+
+class LocalStores:
+    def __init__(self, database_path: Path, encryption_secret: str) -> None:
+        if len(encryption_secret) < 32:
+            raise ValueError("host_encryption_secret_too_short")
+        self.database_path = database_path
+        digest = hashlib.sha256(encryption_secret.encode("utf-8")).digest()
+        self._fernet = Fernet(base64.urlsafe_b64encode(digest))
+        self.lease_ttl = timedelta(hours=1)
+
+    def initialize(self) -> None:
+        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as db:
+            db.executescript(_SCHEMA)
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.database_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        return connection
+
+    # ---- objects ---------------------------------------------------------
+
+    def put_object(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        purpose: str,
+        content: str,
+        content_sha256: str,
+        expires_at: datetime | None,
+    ) -> str:
+        if hashlib.sha256(content.encode("utf-8")).hexdigest() != content_sha256:
+            raise StoreError("object_store_digest_mismatch", status_code=422)
+        object_ref = f"obj_{_token()}"
+        encrypted = self._fernet.encrypt(content.encode("utf-8"))
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO host_objects
+                   (object_ref, tenant_id, subject_id, purpose, content_sha256,
+                    encrypted_content, expires_at, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    object_ref,
+                    tenant_id,
+                    subject_id,
+                    purpose,
+                    content_sha256,
+                    encrypted,
+                    expires_at.isoformat() if expires_at else None,
+                    _now().isoformat(),
+                ),
+            )
+        return object_ref
+
+    def get_object(self, *, tenant_id: str, subject_id: str, object_ref: str) -> str:
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT * FROM host_objects
+                   WHERE object_ref=? AND tenant_id=? AND subject_id=?""",
+                (object_ref, tenant_id, subject_id),
+            ).fetchone()
+        if row is None:
+            raise StoreError("object_store_not_found", status_code=404)
+        expires_at = row["expires_at"]
+        if expires_at is not None and datetime.fromisoformat(str(expires_at)) <= _now():
+            raise StoreError("object_store_expired", status_code=404)
+        try:
+            return self._fernet.decrypt(bytes(row["encrypted_content"])).decode("utf-8")
+        except Exception as exc:  # noqa: BLE001 - bounded local fallback
+            raise StoreError("object_store_decryption_failed", status_code=500) from exc
+
+    def delete_object(
+        self, *, tenant_id: str, subject_id: str, object_ref: str
+    ) -> None:
+        with self._connect() as db:
+            db.execute(
+                "DELETE FROM host_objects WHERE object_ref=? AND tenant_id=? AND subject_id=?",
+                (object_ref, tenant_id, subject_id),
+            )
+
+    # ---- events / telemetry ----------------------------------------------
+
+    def record_event(self, *, event_id: str, envelope: dict[str, object]) -> None:
+        with self._connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO host_events (event_id, envelope_json, created_at) VALUES (?, ?, ?)",
+                (
+                    event_id,
+                    json.dumps(envelope, sort_keys=True, separators=(",", ":")),
+                    _now().isoformat(),
+                ),
+            )
+
+    def record_telemetry(self, *, name: str, fields: dict[str, object]) -> None:
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO host_telemetry (name, fields_json, created_at) VALUES (?, ?, ?)",
+                (
+                    name,
+                    json.dumps(fields, sort_keys=True, separators=(",", ":")),
+                    _now().isoformat(),
+                ),
+            )
+
+    # ---- approvals ---------------------------------------------------------
+
+    def create_approval(
+        self, *, tenant_id: str, subject_id: str, action_id: str, action_digest: str
+    ) -> str:
+        confirmation_ref = f"confirm_{_token()}"
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO host_approvals
+                   (confirmation_ref, tenant_id, subject_id, action_id, action_digest, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    confirmation_ref,
+                    tenant_id,
+                    subject_id,
+                    action_id,
+                    action_digest,
+                    _now().isoformat(),
+                ),
+            )
+        return confirmation_ref
+
+    def verify_approval(
+        self, *, confirmation_ref: str, action_id: str, action_digest: str
+    ) -> bool:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT action_id, action_digest FROM host_approvals WHERE confirmation_ref=?",
+                (confirmation_ref,),
+            ).fetchone()
+        return (
+            row is not None
+            and str(row["action_id"]) == action_id
+            and hmac.compare_digest(str(row["action_digest"]), action_digest)
+        )
+
+    # ---- actions / knowledge -----------------------------------------------
+
+    def record_action(
+        self,
+        *,
+        idempotency_key: str,
+        tenant_id: str,
+        subject_id: str,
+        action_id: str,
+    ) -> dict[str, object]:
+        result: dict[str, object] = {
+            "status": "applied",
+            "action_id": action_id,
+            "result_ref": f"act_{_token()}",
+            "execution_id": f"exec_{_token()}",
+        }
+        with self._connect() as db:
+            existing = db.execute(
+                "SELECT result_json FROM host_actions WHERE idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+            if existing is not None:
+                loaded: Any = json.loads(str(existing["result_json"]))
+                return loaded if isinstance(loaded, dict) else result
+            db.execute(
+                """INSERT INTO host_actions
+                   (idempotency_key, tenant_id, subject_id, action_id, result_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    idempotency_key,
+                    tenant_id,
+                    subject_id,
+                    action_id,
+                    json.dumps(result, sort_keys=True, separators=(",", ":")),
+                    _now().isoformat(),
+                ),
+            )
+        return result
+
+    def record_knowledge(
+        self,
+        *,
+        idempotency_key: str,
+        tenant_id: str,
+        subject_id: str,
+        candidate_id: str,
+    ) -> dict[str, object]:
+        result: dict[str, object] = {
+            "status": "approved",
+            "knowledge_ref": f"kref_{_token()}",
+            "knowledge_candidate_ref": candidate_id,
+            "approved_at": _now().isoformat(),
+        }
+        with self._connect() as db:
+            existing = db.execute(
+                "SELECT result_json FROM host_knowledge WHERE idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+            if existing is not None:
+                loaded = json.loads(str(existing["result_json"]))
+                return loaded if isinstance(loaded, dict) else result
+            db.execute(
+                """INSERT INTO host_knowledge
+                   (idempotency_key, tenant_id, subject_id, candidate_id, result_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    idempotency_key,
+                    tenant_id,
+                    subject_id,
+                    candidate_id,
+                    json.dumps(result, sort_keys=True, separators=(",", ":")),
+                    _now().isoformat(),
+                ),
+            )
+        return result
+
+    def record_knowledge_revocation(
+        self,
+        *,
+        request_id: str,
+        tenant_id: str,
+        subject_id: str,
+    ) -> dict[str, object]:
+        result: dict[str, object] = {
+            "status": "revoked",
+            "revoke_ref": f"krev_{_token()}",
+            "revoked_count": 0,
+            "reindexed_count": 0,
+        }
+        with self._connect() as db:
+            existing = db.execute(
+                "SELECT result_json FROM host_knowledge_revocations WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            if existing is not None:
+                loaded = json.loads(str(existing["result_json"]))
+                return loaded if isinstance(loaded, dict) else result
+            db.execute(
+                """INSERT INTO host_knowledge_revocations
+                   (request_id, tenant_id, subject_id, result_json, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    request_id,
+                    tenant_id,
+                    subject_id,
+                    json.dumps(result, sort_keys=True, separators=(",", ":")),
+                    _now().isoformat(),
+                ),
+            )
+        return result
+
+    # ---- quota -------------------------------------------------------------
+
+    def acquire_quota(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        account_id: UUID | None,
+        operation: str,
+        max_concurrent: int,
+        max_per_hour: int,
+        max_per_day: int,
+    ) -> QuotaLease | None:
+        now = _now()
+        scope_key = f"{tenant_id}|{subject_id}|{account_id or ''}"
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                if max_concurrent > 0:
+                    active = db.execute(
+                        """SELECT COUNT(*) AS count FROM host_quota_leases
+                           WHERE tenant_id=? AND subject_id=? AND account_id=? AND operation=?
+                             AND expires_at > ?""",
+                        (
+                            tenant_id,
+                            subject_id,
+                            str(account_id) if account_id else "",
+                            operation,
+                            now.isoformat(),
+                        ),
+                    ).fetchone()
+                    if int(active["count"]) >= max_concurrent:
+                        db.rollback()
+                        return None
+                if max_per_hour > 0:
+                    hourly = db.execute(
+                        """SELECT COUNT(*) AS count FROM host_quota_usage
+                           WHERE scope_key=? AND operation=? AND consumed_at > ?""",
+                        (scope_key, operation, (now - timedelta(hours=1)).isoformat()),
+                    ).fetchone()
+                    if int(hourly["count"]) >= max_per_hour:
+                        db.rollback()
+                        return None
+                if max_per_day > 0:
+                    daily = db.execute(
+                        """SELECT COUNT(*) AS count FROM host_quota_usage
+                           WHERE scope_key=? AND operation=? AND consumed_at > ?""",
+                        (scope_key, operation, (now - timedelta(days=1)).isoformat()),
+                    ).fetchone()
+                    if int(daily["count"]) >= max_per_day:
+                        db.rollback()
+                        return None
+                lease_id = uuid4()
+                db.execute(
+                    """INSERT INTO host_quota_leases
+                       (lease_id, tenant_id, subject_id, account_id, operation, acquired_at, expires_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        str(lease_id),
+                        tenant_id,
+                        subject_id,
+                        str(account_id) if account_id else "",
+                        operation,
+                        now.isoformat(),
+                        (now + self.lease_ttl).isoformat(),
+                    ),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+        return QuotaLease(
+            lease_id=lease_id,
+            tenant_id=tenant_id,
+            subject_id=subject_id,
+            account_id=account_id,
+            operation=operation,
+            acquired_at=now,
+        )
+
+    def release_quota(self, *, lease_id: str, consume: bool) -> None:
+        now = _now()
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                row = db.execute(
+                    "SELECT * FROM host_quota_leases WHERE lease_id=?", (lease_id,)
+                ).fetchone()
+                if row is None:
+                    db.commit()
+                    return
+                if consume:
+                    db.execute(
+                        """INSERT INTO host_quota_usage (scope_key, operation, consumed_at)
+                           VALUES (?, ?, ?)""",
+                        (
+                            f"{row['tenant_id']}|{row['subject_id']}|{row['account_id'] or ''}",
+                            str(row["operation"]),
+                            now.isoformat(),
+                        ),
+                    )
+                db.execute(
+                    "DELETE FROM host_quota_leases WHERE lease_id=?", (lease_id,)
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+
+    # ---- oauth browser flow routing -----------------------------------------
+
+    def record_oauth_flow(
+        self,
+        *,
+        state: str,
+        tenant_id: str,
+        subject_id: str,
+        provider: str,
+        ttl: timedelta,
+    ) -> None:
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO host_oauth_flows (state, tenant_id, subject_id, provider, expires_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (state, tenant_id, subject_id, provider, (_now() + ttl).isoformat()),
+            )
+
+    def lookup_oauth_flow(self, *, state: str, provider: str) -> tuple[str, str] | None:
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT tenant_id, subject_id, expires_at FROM host_oauth_flows
+                   WHERE state=? AND provider=?""",
+                (state, provider),
+            ).fetchone()
+        if row is None:
+            return None
+        if datetime.fromisoformat(str(row["expires_at"])) <= _now():
+            return None
+        return str(row["tenant_id"]), str(row["subject_id"])
