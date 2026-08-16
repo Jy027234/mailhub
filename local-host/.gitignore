@@ -5,3 +5,4 @@ b4-state.json
 __pycache__/
 *.pyc
 .pytest_cache/
+b4-imap-state.json
