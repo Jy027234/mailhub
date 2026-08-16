@@ -55,6 +55,14 @@ def _fail(step: str, response: httpx.Response) -> None:
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--subject", default=None, help="邮件主题（缺省用时间戳测试主题）"
+    )
+    parser.add_argument("--body", default=None, help="邮件正文（缺省用发送测试正文）")
+    args = parser.parse_args()
     load_env()
     enabled = os.environ.get("MAILHUB_OUTBOUND_ENABLED", "").strip().casefold() in {
         "1",
@@ -165,8 +173,9 @@ def main() -> int:
                 "connection_id": connection_id,
                 "thread_id": thread_id,
                 "recipient_addresses": [mailbox],
-                "subject": f"MailHub B4 发送测试 {timestamp}",
-                "body_text": (
+                "subject": args.subject or f"MailHub B4 发送测试 {timestamp}",
+                "body_text": args.body
+                or (
                     "这是一封由 MailHub 受控出站链路发送的测试邮件：\n"
                     "草稿 -> 宿主确认 -> 审批绑定出站 -> SMTP 发送。\n"
                     "如收到本邮件，说明发送闭环正常。"

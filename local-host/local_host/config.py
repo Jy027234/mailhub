@@ -21,6 +21,15 @@ class HostSettings:
     gmail_client_secret: str
     gmail_redirect_uri: str
     gmail_scopes: tuple[str, ...]
+    ai_gateway_url: str | None
+    ai_gateway_model: str
+    ai_gateway_api_key: str
+
+    @property
+    def ai_gateway_enabled(self) -> bool:
+        return bool(
+            self.ai_gateway_url and self.ai_gateway_model and self.ai_gateway_api_key
+        )
 
     @classmethod
     def from_env(cls) -> HostSettings:
@@ -38,6 +47,9 @@ class HostSettings:
             gmail_scopes=_env_tuple(
                 "HOST_GMAIL_SCOPES", "https://www.googleapis.com/auth/gmail.readonly"
             ),
+            ai_gateway_url=os.getenv("HOST_AI_GATEWAY_URL") or None,
+            ai_gateway_model=os.getenv("HOST_AI_GATEWAY_MODEL", ""),
+            ai_gateway_api_key=os.getenv("HOST_AI_GATEWAY_API_KEY", ""),
         )
         settings.validate()
         return settings
@@ -64,6 +76,22 @@ class HostSettings:
             raise ValueError(
                 "HOST_GMAIL_ENABLED requires HOST_GMAIL_CLIENT_ID and HOST_GMAIL_CLIENT_SECRET"
             )
+        if self.ai_gateway_url:
+            parsed_ai = urlsplit(self.ai_gateway_url)
+            ai_local_http = (
+                parsed_ai.scheme == "http"
+                and (parsed_ai.hostname or "").casefold() in _LOCAL_HOSTS
+            )
+            if not parsed_ai.hostname or (
+                parsed_ai.scheme != "https" and not ai_local_http
+            ):
+                raise ValueError("HOST_AI_GATEWAY_URL must be an https or loopback URL")
+            if parsed_ai.query or parsed_ai.fragment:
+                raise ValueError("HOST_AI_GATEWAY_URL must not carry query or fragment")
+            if not self.ai_gateway_model or len(self.ai_gateway_model) > 200:
+                raise ValueError("HOST_AI_GATEWAY_MODEL invalid")
+            if not self.ai_gateway_api_key:
+                raise ValueError("HOST_AI_GATEWAY_API_KEY required with gateway URL")
 
 
 def _env_bool(name: str, *, default: bool) -> bool:

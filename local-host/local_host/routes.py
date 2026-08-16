@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -22,9 +23,17 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from local_host import _bff  # noqa: F401  (bootstrap apps/bff/src on sys.path)
+from local_host.ai import (
+    build_model_prompt,
+    call_chat_model,
+    parse_model_json,
+    serialize_ai_result,
+)
 from local_host.auth import make_service_auth
 from local_host.config import HostSettings
 from local_host.stores import LocalStores, StoreError
+
+logger = logging.getLogger("local-host")
 
 from caplatform_bff.mailhub_credentials import (  # noqa: E402
     CredentialRefresh,
@@ -535,13 +544,14 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
 
     @router.post("/v1/mail-host/ai/structure", dependencies=[service_auth])
     async def ai_structure(request: Request) -> JSONResponse:
-        """Deterministic rules pass-through for the local host.
+        """Rules-first model gateway for the local host.
 
-        The local host owns no model gateway, so it re-runs MailHub's own
-        evidence-first deterministic analysis on the provided source and
-        returns the bounded AI_RESULT_SCHEMA shape with an explicit
-        ``model_ref``.  This keeps the durable graph honest: analysis is the
-        rules engine, never a fake model claim.
+        The deterministic rules engine always runs first: it is the safety
+        baseline and the injection gate.  When a model gateway is configured
+        and the baseline is clean, the body (strictly as data) is sent to the
+        gateway; the reply is validated against MailHub's own AI merge
+        contract and any failure falls back to the rules result.  Without a
+        gateway the endpoint is the pure rules pass-through.
         """
 
         body = _json_body(request)
@@ -572,14 +582,15 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         from mailhub.domain import MailMessageProjection  # noqa: PLC0415 (bounded local import)
         from mailhub.intelligence import (  # noqa: PLC0415
             analyze_message as rules_analyze,
+            merge_ai_result,
         )
 
         projection = MailMessageProjection(
             message_id=parsed_id,
             tenant_id=str(body.get("tenant_id", "b4-tenant")),
-            connection_id=uuid5(NAMESPACE_URL, f"mailhub:host-rules:{parsed_id}"),
-            thread_id=uuid5(NAMESPACE_URL, f"mailhub:host-rules-thread:{parsed_id}"),
-            provider_message_ref=f"host-rules:{parsed_id}",
+            connection_id=uuid5(NAMESPACE_URL, f"mailhub:host-ai:{parsed_id}"),
+            thread_id=uuid5(NAMESPACE_URL, f"mailhub:host-ai-thread:{parsed_id}"),
+            provider_message_ref=f"host-ai:{parsed_id}",
             internet_message_id=None,
             sender_address="rules@mailhub.invalid",
             recipient_addresses=("rules@mailhub.invalid",),
@@ -588,25 +599,59 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
             body_text=str(body_text),
             content_sha256=str(content_sha256),
         )
-        result = rules_analyze(projection)
+        baseline = rules_analyze(projection)
+
+        if baseline.injection_detected:
+            # Never send injection-carrying content to the model; the rules
+            # result already abstains.
+            return JSONResponse(
+                content={
+                    "result": serialize_ai_result(
+                        baseline, model_ref="mailhub-rules-abstain-v1"
+                    )
+                }
+            )
+
+        if settings.ai_gateway_enabled:
+            try:
+                system_prompt, user_prompt = build_model_prompt(
+                    subject=str(subject), body_text=str(body_text), baseline=baseline
+                )
+                reply = await call_chat_model(
+                    base_url=settings.ai_gateway_url or "",
+                    api_key=settings.ai_gateway_api_key,
+                    model=settings.ai_gateway_model,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                )
+                model_output = parse_model_json(reply)
+                if model_output is None:
+                    raise RuntimeError("model_gateway_unparseable")
+                merged = merge_ai_result(baseline, model_output)
+                return JSONResponse(
+                    content={
+                        "result": serialize_ai_result(
+                            merged, model_ref=settings.ai_gateway_model
+                        )
+                    }
+                )
+            except Exception:
+                # Gateway problems must never break analysis: fall back to the
+                # deterministic result with an explicit ref.
+                logger.exception("ai gateway failed; falling back to rules")
+                return JSONResponse(
+                    content={
+                        "result": serialize_ai_result(
+                            baseline, model_ref="mailhub-rules-fallback-v1"
+                        )
+                    }
+                )
+
         return JSONResponse(
             content={
-                "result": {
-                    "summary": result.summary,
-                    "action_candidates": [
-                        dict(item) for item in result.action_candidates
-                    ],
-                    "knowledge_candidate": (
-                        dict(result.knowledge_candidate)
-                        if result.knowledge_candidate is not None
-                        else None
-                    ),
-                    "confidence": result.confidence,
-                    "model_ref": "mailhub-rules-pass-through-v1",
-                    "decisions": list(result.decisions),
-                    "risks": list(result.risks),
-                    "commitments": list(result.commitments),
-                }
+                "result": serialize_ai_result(
+                    baseline, model_ref="mailhub-rules-pass-through-v1"
+                )
             }
         )
 

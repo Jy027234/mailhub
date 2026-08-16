@@ -365,6 +365,21 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > （确认不能绕过缺失策略）。local-host 门禁 **14 tests** 全绿。这是本地单用户
 > 审批/开关语义下的 SMTP 证据；`MAIL-SMTP-001/002` 的对账、认证与四眼审批仍开放。
 
+> **AI 模型网关与每日自主周期增量（2026-08-16，MAIL-AI 本地运行证据）**：本地宿主
+> AI 端口升级为"规则基线 + 模型增强"：确定性规则先跑并作为注入硬门（命中注入
+> 绝不调模型、直接 abstain）；配置 OpenAI 兼容网关后（`HOST_AI_GATEWAY_URL/MODEL/
+> API_KEY`，正文出境为宿主 `.env` 记录的数据决策），模型输出经 MailHub 自有
+> `merge_ai_result` 合同校验，网关超时/解析/校验失败自动回退规则
+> （`mailhub-rules-fallback-v1`），分析永不中断。真机验证（qwen3.6-plus 教育网关）：
+> 单封分析 `mode=ai_enriched`、`model_ref=qwen/qwen3.6-plus-2026-04-02`，摘要为真实
+> 语义理解（29 项航空部件询价、需回复工时费/周转时间/报价）；`scripts/b4_autonomy.py`
+> 跑通真实 recommend_only 自主周期（同步→10 封模型分析→候选），对一封新到业务邮件
+> 生成项目候选（项目 ref/风险/决定/承诺/截止日期齐全，confidence 0.74）与知识候选
+> （0.85），全部 `requires_review=true`、无外部副作用。门禁：local-host **17 tests**
+> （网关成功/回退/注入跳过三条负向）、MailHub **340 tests** 全绿。注入语料
+> shadow/canary、成本/延迟与生产模型网关治理仍属 `MAIL-AI-010/011/012/013`，
+> 不因本地演示勾选。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

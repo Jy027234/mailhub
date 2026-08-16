@@ -132,6 +132,29 @@ refresh 与 revoke → 再开第二次授权生成 A2 活动连接。
    本地宿主的 approval 是单用户本地确认、kill-switch 恒允许——生产宿主必须
    替换为四眼审批与真实开关权威。
 
+## AI 模型网关 + 每日自主周期（智能部分）
+
+宿主 AI 端口默认是确定性规则直通。配置 OpenAI 兼容网关后，分析变为
+**规则基线 + 模型增强**：规则先跑（注入检测是硬门，命中注入绝不调模型），
+模型输出经 MailHub 自己的 AI merge 合同校验，任何网关故障自动回退规则，
+分析永不中断。正文会发送到网关端点——这是宿主的**数据出境决策**，由 `.env` 记录。
+
+```text
+HOST_AI_GATEWAY_URL=https://model-router.edu-aliyun.com/v1
+HOST_AI_GATEWAY_MODEL=qwen/qwen3.6-plus-2026-04-02
+HOST_AI_GATEWAY_API_KEY=sk-...
+```
+
+验证模型已接通（重新分析任一邮件应返回 `mode=ai_enriched` 与模型名）：
+
+```powershell
+python scripts\b4_autonomy.py
+```
+
+自主周期 = 增量同步 → 对最新消息逐封 AI 分析 → 产出**今日候选清单**
+（项目/任务/知识/跟进，全部 `requires_review=true`，绝不自动执行外部动作）。
+结果写入 `b4-autonomy-state.json`。
+
 ## A2 有界只读同步
 
 A1 完成后按脚本输出的命令运行（需要 `MAILHUB_ACTIVATION_ALLOW_NETWORK=true`）：
