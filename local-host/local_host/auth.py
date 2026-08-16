@@ -23,7 +23,9 @@ def make_service_auth(service_token: str) -> Any:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"code": "host_service_token_malformed"},
             )
-        if not hmac.compare_digest(token.encode("utf-8"), service_token.encode("utf-8")):
+        if not hmac.compare_digest(
+            token.encode("utf-8"), service_token.encode("utf-8")
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"code": "host_service_token_invalid"},

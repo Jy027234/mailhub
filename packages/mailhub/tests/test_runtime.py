@@ -69,6 +69,32 @@ def test_durable_runtime_registers_only_explicit_real_provider() -> None:
     asyncio.run(repository.dispose())
 
 
+def test_durable_runtime_registers_imap_read_only_slice() -> None:
+    from mailhub.connectors.imap_smtp import ImapSmtpConnector
+
+    app = create_durable_app(
+        _production_settings(
+            imap_enabled=True,
+            imap_host="imap.gmail.com",
+            smtp_host="smtp.gmail.com",
+        )
+    )
+    service = app.state.mail_service
+    repository = app.state.mail_repository
+
+    assert set(service.connectors) == {ProviderName.IMAP_SMTP}
+    connector = service.connectors[ProviderName.IMAP_SMTP]
+    assert isinstance(connector, ImapSmtpConnector)
+    assert connector.send_enabled is False
+    assert connector.capabilities.supports_send is False
+    asyncio.run(repository.dispose())
+
+
+def test_durable_runtime_fails_closed_when_imap_hosts_are_missing() -> None:
+    with pytest.raises(RuntimeError, match="mailhub_imap_hosts_required"):
+        create_durable_app(_production_settings(imap_enabled=True))
+
+
 def test_durable_runtime_fails_closed_outside_production_like_mode() -> None:
     with pytest.raises(
         RuntimeError,

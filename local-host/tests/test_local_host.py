@@ -474,3 +474,86 @@ async def test_broker_lifecycle_through_http(settings: HostSettings) -> None:
         )
         assert response.status_code == 403
         assert response.json()["code"] == "credential_revoked"
+
+
+@pytest.mark.asyncio
+async def test_imap_app_password_intake_resolve_refresh_and_revoke(
+    client: httpx.AsyncClient,
+) -> None:
+    intake = await client.post(
+        "/v1/mail-host/admin/credentials",
+        headers=_auth(),
+        json={
+            "provider": "imap_smtp",
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+            "username": "isolated@gmail.test",
+            "password": "app-password-1234",
+        },
+    )
+    assert intake.status_code == 200
+    credential_ref = intake.json()["credential_ref"]
+    assert credential_ref.startswith("imapcred_")
+
+    resolved = await client.post(
+        "/v1/mail-host/credentials/resolve",
+        headers=_auth(),
+        json={
+            "credential_ref": credential_ref,
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+        },
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["credentials"] == {
+        "username": "isolated@gmail.test",
+        "password": "app-password-1234",
+    }
+
+    # Cross-tenant resolution fails closed.
+    denied = await client.post(
+        "/v1/mail-host/credentials/resolve",
+        headers=_auth(),
+        json={
+            "credential_ref": credential_ref,
+            "tenant_id": "tenant-2",
+            "subject_id": "user-1",
+        },
+    )
+    assert denied.status_code == 404
+
+    refreshed = await client.post(
+        "/v1/mail-host/credentials/refresh",
+        headers=_auth(),
+        json={
+            "credential_ref": credential_ref,
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+            "reason": "b4_imap_refresh",
+        },
+    )
+    assert refreshed.status_code == 200
+    assert refreshed.json()["metadata"]["email_address"] == "isolated@gmail.test"
+
+    revoked = await client.post(
+        "/v1/mail-host/credentials/revoke",
+        headers=_auth(),
+        json={
+            "credential_ref": credential_ref,
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+        },
+    )
+    assert revoked.status_code == 200
+    assert revoked.json()["status"] == "revoked"
+
+    resolved = await client.post(
+        "/v1/mail-host/credentials/resolve",
+        headers=_auth(),
+        json={
+            "credential_ref": credential_ref,
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+        },
+    )
+    assert resolved.status_code == 404

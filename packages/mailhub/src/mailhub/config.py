@@ -72,6 +72,16 @@ class MailHubSettings(BaseModel):
     microsoft_graph_read_only: bool = True
     gmail_push_enabled: bool = False
     microsoft_graph_push_enabled: bool = False
+    # IMAP/SMTP is an application-password/XOAUTH2 transport and never uses the
+    # Gmail/Graph OAuth registration above.  Read-only IMAP sync is the B4
+    # fallback slice; SMTP send stays disabled until an explicit operator gate.
+    imap_enabled: bool = False
+    imap_host: str | None = None
+    smtp_host: str | None = None
+    imap_port: int = Field(default=993, ge=1, le=65535)
+    smtp_port: int = Field(default=465, ge=1, le=65535)
+    imap_folder: str = Field(default="INBOX", min_length=1, max_length=200)
+    smtp_send_enabled: bool = False
 
     @classmethod
     def from_env(cls) -> MailHubSettings:
@@ -141,6 +151,13 @@ class MailHubSettings(BaseModel):
             microsoft_graph_push_enabled=_env_bool(
                 "MAILHUB_MICROSOFT_GRAPH_PUSH_ENABLED", default=False
             ),
+            imap_enabled=_env_bool("MAILHUB_IMAP_ENABLED", default=False),
+            imap_host=os.getenv("MAILHUB_IMAP_HOST"),
+            smtp_host=os.getenv("MAILHUB_SMTP_HOST"),
+            imap_port=_env_int("MAILHUB_IMAP_PORT", 993),
+            smtp_port=_env_int("MAILHUB_SMTP_PORT", 465),
+            imap_folder=os.getenv("MAILHUB_IMAP_FOLDER", "INBOX"),
+            smtp_send_enabled=_env_bool("MAILHUB_SMTP_SEND_ENABLED", default=False),
         )
 
     def analysis_policy(self) -> AnalysisPolicy:

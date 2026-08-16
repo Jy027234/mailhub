@@ -74,6 +74,35 @@ python scripts\b4_a1.py
 点击回调页的【故意重放同一 state】链接生成拒绝证据 → 回车 → 脚本执行
 refresh 与 revoke → 再开第二次授权生成 A2 活动连接。
 
+## IMAP 应用密码路径（免 Google Cloud，先验证真实邮箱）
+
+不需要任何 Google Cloud 项目，适合先证明"真实邮箱 → durable 同步 → 分析"
+整条价值链。**该路径是 IMAP 传输的本地工程证据，不关闭 Gmail REST (M2) 激活门。**
+
+1. 隔离 Gmail 账号打开**两步验证**（[Google 账号安全页](https://myaccount.google.com/security)）。
+2. 生成**应用专用密码**（Security → 2-Step Verification → App passwords），
+   记录 16 位密码（只用于本地 `.env` 或脚本交互输入，不提交）。
+3. `.env` 启用 IMAP：
+
+   ```text
+   MAILHUB_IMAP_ENABLED=true
+   MAILHUB_IMAP_HOST=imap.gmail.com
+   MAILHUB_SMTP_HOST=smtp.gmail.com
+   MAILHUB_SMTP_SEND_ENABLED=false
+   ```
+
+4. 重启两个进程 → `b4_smoke.py`（9/9，`/health/ready=ready`）→ 走查：
+
+   ```powershell
+   $env:HOST_IMAP_USERNAME = "隔离邮箱@gmail.com"
+   $env:HOST_IMAP_APP_PASSWORD = "16位应用密码"
+   python scripts\b4_imap.py --received-after 2026-07-01T00:00:00Z --received-before 2026-08-31T00:00:00Z
+   ```
+
+   脚本依次执行：应用密码加密入库（宿主）→ 创建/激活连接 → 有界 backfill 同步
+   （幂等键重放验证）→ 增量同步 → 线程/消息投影检查 → 规则模式智能分析 →
+   写入 `b4-imap-state.json` 证据。发送保持关闭（`supports_send=false`）。
+
 ## A2 有界只读同步
 
 A1 完成后按脚本输出的命令运行（需要 `MAILHUB_ACTIVATION_ALLOW_NETWORK=true`）：

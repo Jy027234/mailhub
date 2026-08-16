@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from mailhub.api import _build_default_oauth, _host_service_headers, create_app
 from mailhub.config import MailHubSettings
 from mailhub.connectors.http_providers import GmailConnector, MicrosoftGraphConnector
+from mailhub.connectors.imap_smtp import ImapSmtpConnector
 from mailhub.domain import ProviderName
 from mailhub.hosts.http import (
     HttpAgentMemoryAdapter,
@@ -87,6 +88,17 @@ def create_durable_app(runtime_settings: MailHubSettings | None = None) -> FastA
         connectors[ProviderName.MICROSOFT_GRAPH] = MicrosoftGraphConnector(
             read_only=settings.microsoft_graph_read_only,
             push_enabled=settings.microsoft_graph_push_enabled,
+        )
+    if settings.imap_enabled:
+        if not settings.imap_host or not settings.smtp_host:
+            raise RuntimeError("mailhub_imap_hosts_required")
+        connectors[ProviderName.IMAP_SMTP] = ImapSmtpConnector(
+            imap_host=settings.imap_host,
+            smtp_host=settings.smtp_host,
+            imap_port=settings.imap_port,
+            smtp_port=settings.smtp_port,
+            folder=settings.imap_folder,
+            send_enabled=settings.outbound_enabled and settings.smtp_send_enabled,
         )
 
     oauth_service, oauth_callback = _build_default_oauth(settings)

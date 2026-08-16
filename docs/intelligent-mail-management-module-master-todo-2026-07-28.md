@@ -326,6 +326,20 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > 删除 fail-closed）。以上均为本地工程证据；B4 勾选仍需隔离 Gmail 账号真实 OAuth 与
 > A1/A2 脱敏证据包，M2/M3 保持未勾选。
 
+> **IMAP 免 OAuth 切片增量（2026-08-15，MAIL-IMAP 工程准备）**：为不阻塞真实邮箱
+> 验证，durable runtime 现可显式注册 `ImapSmtpConnector`（`MAILHUB_IMAP_ENABLED` +
+> `MAILHUB_IMAP_HOST/SMTP_HOST/PORT/FOLDER`），发送保持双重关闭
+> （`MAILHUB_SMTP_SEND_ENABLED=false` 且 `outbound_enabled` 为假时 `supports_send=false`）；
+> 缺主机名 fail closed。本地宿主新增服务令牌认证的应用密码加密入库
+> （`POST /v1/mail-host/admin/credentials`，Fernet 加密、`imapcred_*` 引用、
+> resolve/refresh/revoke 租户隔离），`scripts/b4_imap.py` 走查
+> 入库→创建/激活→有界 backfill（幂等重放）→增量→投影→规则分析并写
+> `b4-imap-state.json`。门禁：MailHub **338 tests**、local-host **11 tests**，
+> ruff/format/mypy 全绿；真实网络预演（imap.gmail.com:993，假凭据）验证 TLS 连接、
+> 连接生命周期与 job fail-closed（`provider_failure`、零游标推进、审计落账），
+> 成功切片待真实应用密码执行。真实 IMAP 服务器矩阵/IDLE 与 SMTP 对账仍属
+> `MAIL-IMAP-002/004/005/006`，不因本地预演勾选。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

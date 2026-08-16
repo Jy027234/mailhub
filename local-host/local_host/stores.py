@@ -111,6 +111,19 @@ CREATE TABLE IF NOT EXISTS host_quota_leases (
 CREATE INDEX IF NOT EXISTS idx_host_quota_scope ON host_quota_leases(
     tenant_id, subject_id, account_id, operation
 );
+CREATE TABLE IF NOT EXISTS host_imap_credentials (
+    credential_ref TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    encrypted_password BLOB NOT NULL,
+    status TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    revoked_at TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_host_imap_credentials_owner
+    ON host_imap_credentials(tenant_id, subject_id, status);
 CREATE TABLE IF NOT EXISTS host_quota_usage (
     scope_key TEXT NOT NULL,
     operation TEXT NOT NULL,
@@ -498,6 +511,76 @@ class LocalStores:
             except Exception:
                 db.rollback()
                 raise
+
+    # ---- IMAP application-password credentials ------------------------------
+
+    def store_imap_credential(
+        self, *, tenant_id: str, subject_id: str, username: str, password: str
+    ) -> str:
+        """Encrypt and store an IMAP application password; return an opaque ref.
+
+        The password never leaves this table in plaintext and is only handed
+        back as a short-lived credential during a provider resolve call.
+        """
+
+        if not password or any(ord(char) < 33 or ord(char) == 127 for char in password):
+            raise StoreError("imap_password_invalid", status_code=422)
+        if len(password) > 512:
+            raise StoreError("imap_password_invalid", status_code=422)
+        credential_ref = f"imapcred_{_token()}"
+        encrypted = self._fernet.encrypt(password.encode("utf-8"))
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO host_imap_credentials
+                   (credential_ref, tenant_id, subject_id, username, encrypted_password,
+                    status, version, revoked_at, created_at)
+                   VALUES (?, ?, ?, ?, ?, 'ACTIVE', 1, NULL, ?)""",
+                (
+                    credential_ref,
+                    tenant_id,
+                    subject_id,
+                    username,
+                    encrypted,
+                    _now().isoformat(),
+                ),
+            )
+        return credential_ref
+
+    def resolve_imap_credential(
+        self, *, credential_ref: str, tenant_id: str, subject_id: str
+    ) -> dict[str, str] | None:
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT * FROM host_imap_credentials
+                   WHERE credential_ref=? AND tenant_id=? AND subject_id=?""",
+                (credential_ref, tenant_id, subject_id),
+            ).fetchone()
+        if row is None or str(row["status"]) != "ACTIVE":
+            return None
+        try:
+            password = self._fernet.decrypt(bytes(row["encrypted_password"])).decode(
+                "utf-8"
+            )
+        except Exception as exc:  # noqa: BLE001 - bounded local fallback
+            raise StoreError(
+                "imap_credential_decryption_failed", status_code=500
+            ) from exc
+        return {"username": str(row["username"]), "password": password}
+
+    def revoke_imap_credential(
+        self, *, credential_ref: str, tenant_id: str, subject_id: str
+    ) -> bool:
+        with self._connect() as db:
+            updated = db.execute(
+                """UPDATE host_imap_credentials
+                   SET status='REVOKED', version=version+1, revoked_at=?
+                   WHERE credential_ref=? AND tenant_id=? AND subject_id=? AND status='ACTIVE'""",
+                (_now().isoformat(), credential_ref, tenant_id, subject_id),
+            ).rowcount
+            return updated == 1
+
+    def is_imap_credential_ref(self, credential_ref: str) -> bool:
+        return credential_ref.startswith("imapcred_")
 
     # ---- oauth browser flow routing -----------------------------------------
 

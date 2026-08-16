@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -177,6 +178,25 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     @router.post("/v1/mail-host/credentials/resolve", dependencies=[service_auth])
     async def credential_resolve(request: Request) -> dict[str, object]:
         body = _json_body(request)
+        credential_ref = body.get("credential_ref")
+        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(
+            credential_ref
+        ):
+            try:
+                resolved = stores.resolve_imap_credential(
+                    credential_ref=credential_ref,
+                    tenant_id=str(body.get("tenant_id", "")),
+                    subject_id=str(body.get("subject_id", "")),
+                )
+            except StoreError as exc:
+                raise HTTPException(
+                    status_code=exc.status_code, detail={"code": exc.code}
+                ) from exc
+            if resolved is None:
+                raise HTTPException(
+                    status_code=404, detail={"code": "credential_not_found"}
+                )
+            return {"credentials": resolved}
         try:
             credentials = await broker.resolve(CredentialResolve.model_validate(body))
         except (MailHubCredentialBrokerError, ValueError) as exc:
@@ -186,6 +206,30 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     @router.post("/v1/mail-host/credentials/refresh", dependencies=[service_auth])
     async def credential_refresh(request: Request) -> dict[str, object]:
         body = _json_body(request)
+        credential_ref = body.get("credential_ref")
+        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(
+            credential_ref
+        ):
+            # Application passwords do not rotate; the durable answer is
+            # "same credential, unchanged version" so MailHub can persist its
+            # metadata-only refresh observation.
+            resolved = stores.resolve_imap_credential(
+                credential_ref=credential_ref,
+                tenant_id=str(body.get("tenant_id", "")),
+                subject_id=str(body.get("subject_id", "")),
+            )
+            if resolved is None:
+                raise HTTPException(
+                    status_code=404, detail={"code": "credential_not_found"}
+                )
+            return {
+                "metadata": {
+                    "credential_ref": credential_ref,
+                    "email_address": resolved["username"],
+                    "provider_account_id": resolved["username"],
+                    "credential_version": 1,
+                }
+            }
         try:
             metadata = await broker.refresh(CredentialRefresh.model_validate(body))
         except (MailHubCredentialBrokerError, ValueError) as exc:
@@ -195,11 +239,58 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     @router.post("/v1/mail-host/credentials/revoke", dependencies=[service_auth])
     async def credential_revoke(request: Request) -> dict[str, object]:
         body = _json_body(request)
+        credential_ref = body.get("credential_ref")
+        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(
+            credential_ref
+        ):
+            revoked = stores.revoke_imap_credential(
+                credential_ref=credential_ref,
+                tenant_id=str(body.get("tenant_id", "")),
+                subject_id=str(body.get("subject_id", "")),
+            )
+            if not revoked:
+                return {"status": "already_revoked"}
+            return {
+                "status": "revoked",
+                "revocation_id": f"imaprevoke_{secrets.token_urlsafe(16)}",
+            }
         try:
             result = await broker.revoke(CredentialResolve.model_validate(body))
         except (MailHubCredentialBrokerError, ValueError) as exc:
             raise _broker_error(exc) from exc
         return dict(result)
+
+    @router.post("/v1/mail-host/admin/credentials", dependencies=[service_auth])
+    async def admin_store_imap_credential(request: Request) -> dict[str, object]:
+        """Service-token-authenticated intake for an IMAP application password.
+
+        Local/Beta only: a production host would keep this behind an operator
+        console with four-eyes approval.  The password is Fernet-encrypted at
+        rest and returned to callers only as an opaque credential ref.
+        """
+
+        body = _json_body(request)
+        provider = body.get("provider")
+        username = body.get("username")
+        password = body.get("password")
+        if (
+            provider != "imap_smtp"
+            or not isinstance(username, str)
+            or not isinstance(password, str)
+        ):
+            raise HTTPException(status_code=422, detail={"code": "imap_intake_invalid"})
+        try:
+            credential_ref = stores.store_imap_credential(
+                tenant_id=str(body.get("tenant_id", "")),
+                subject_id=str(body.get("subject_id", "")),
+                username=username.strip(),
+                password=password,
+            )
+        except StoreError as exc:
+            raise HTTPException(
+                status_code=exc.status_code, detail={"code": exc.code}
+            ) from exc
+        return {"credential_ref": credential_ref, "provider": "imap_smtp"}
 
     # ---- host actions / knowledge ------------------------------------------
 
