@@ -332,6 +332,58 @@ async def test_approvals_bind_action_identity(client: httpx.AsyncClient) -> None
 
 
 @pytest.mark.asyncio
+async def test_unbound_confirmation_supports_local_send_flow(
+    client: httpx.AsyncClient,
+) -> None:
+    # The send caller cannot know the service-constructed action id in
+    # advance; the local host mirrors the reference in-memory port and
+    # allows an unbound confirmation to verify any action.
+    response = await client.post(
+        "/v1/mail-host/approvals/request",
+        headers=_auth(),
+        json={"tenant_id": "tenant-1", "subject_id": "user-1"},
+    )
+    assert response.status_code == 200
+    confirmation_ref = response.json()["confirmation_ref"]
+
+    any_action = {
+        "action_id": "send-action-unknown",
+        "action_type": "send_reply",
+        "context": {"tenant_id": "tenant-1", "agent_subject_id": "user-1"},
+        "input_digest": "b" * 64,
+    }
+    response = await client.post(
+        "/v1/mail-host/approvals/verify",
+        headers=_auth(),
+        json={"confirmation_ref": confirmation_ref, "action": any_action},
+    )
+    assert response.json()["verified"] is True
+
+    missing = await client.post(
+        "/v1/mail-host/approvals/verify",
+        headers=_auth(),
+        json={"confirmation_ref": "confirm_never-created", "action": any_action},
+    )
+    assert missing.json()["verified"] is False
+
+
+@pytest.mark.asyncio
+async def test_kill_switch_allows_local_outbound(client: httpx.AsyncClient) -> None:
+    response = await client.post(
+        "/v1/mail-host/kill-switch/check",
+        headers=_auth(),
+        json={
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+            "provider": "imap_smtp",
+            "operation": "mail.outbound.queue",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["allowed"] is True
+
+
+@pytest.mark.asyncio
 async def test_knowledge_safety_and_unconfigured_surfaces(
     client: httpx.AsyncClient,
 ) -> None:

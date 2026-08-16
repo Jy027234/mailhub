@@ -354,6 +354,17 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > 不伪装模型输出。以上是 IMAP 传输的真实运行证据，不构成 Gmail REST (M2) 激活；
 > `MAIL-IMAP-002/004/005/006` 的服务器矩阵/IDLE/SMTP 对账仍开放。
 
+> **受控发送闭环完成（2026-08-16，MAIL-SMTP 本地证据）**：本地宿主补齐出站链：
+> kill-switch 检查（本地恒允许）、无绑定本地确认（镜像参考内存端口语义；有绑定时强制
+> 校验 action id/digest）、本地出站 worker（`local_host.worker`，宿主调度单元，共享
+> durable 图与 PostgreSQL，租约/fencing 由核心合同保证）。`scripts/b4_send.py` 走查：
+> 宿主确认 → 策略(L3B 线程内 send_reply/域白名单/限额)+委托 → 草稿（真实线程内回复、
+> 收件人=本邮箱）→ `:send`（decision=delegation_allowed、确认绑定入 approval_ref）→
+> worker 经 `smtp.qiye.163.com:465` 真实发出 → durable operation **succeeded**；约 15 秒后
+> 增量同步拉回该测试邮件（收发闭环）。无策略发送被 `policy_missing` 正确拒绝
+> （确认不能绕过缺失策略）。local-host 门禁 **14 tests** 全绿。这是本地单用户
+> 审批/开关语义下的 SMTP 证据；`MAIL-SMTP-001/002` 的对账、认证与四眼审批仍开放。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

@@ -286,10 +286,16 @@ class LocalStores:
                 "SELECT action_id, action_digest FROM host_approvals WHERE confirmation_ref=?",
                 (confirmation_ref,),
             ).fetchone()
-        return (
-            row is not None
-            and str(row["action_id"]) == action_id
-            and hmac.compare_digest(str(row["action_digest"]), action_digest)
+        if row is None:
+            return False
+        stored_id = str(row["action_id"])
+        stored_digest = str(row["action_digest"])
+        # Unbound confirmations (local single-user mode) verify by existence;
+        # bound confirmations require both action id and digest to match.
+        if not stored_id and not stored_digest:
+            return True
+        return stored_id == action_id and hmac.compare_digest(
+            stored_digest, action_digest
         )
 
     # ---- actions / knowledge -----------------------------------------------

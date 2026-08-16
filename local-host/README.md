@@ -103,6 +103,35 @@ refresh 与 revoke → 再开第二次授权生成 A2 活动连接。
    （幂等键重放验证）→ 增量同步 → 线程/消息投影检查 → 规则模式智能分析 →
    写入 `b4-imap-state.json` 证据。发送保持关闭（`supports_send=false`）。
 
+## 受控发送测试（草稿→审批→outbox→SMTP 真实发信）
+
+默认发送关闭。走一次受控发送闭环（发一封测试邮件给自己）：
+
+1. `.env` 开启三处（并重启 host 与 mailhub）：
+
+   ```text
+   MAILHUB_OUTBOUND_ENABLED=true
+   MAILHUB_SMTP_SEND_ENABLED=true
+   MAILHUB_KILL_SWITCH_ENDPOINT=http://127.0.0.1:8090
+   ```
+
+2. 启动本地出站 worker（宿主拥有的调度单元，租约/防重由 MailHub durable 合同保证）：
+
+   ```powershell
+   pwsh -File scripts\run_worker.ps1
+   ```
+
+3. 执行发送测试（宿主确认 → 策略/委托 → 草稿 → 审批绑定入队 → worker 发送）：
+
+   ```powershell
+   python scripts\b4_send.py
+   ```
+
+   脚本会轮询 durable operation 到 `succeeded`，并写 `b4-send-state.json`。
+   邮件到达后重跑一次增量同步即可在本地投影中看到这封测试邮件（收发闭环）。
+   本地宿主的 approval 是单用户本地确认、kill-switch 恒允许——生产宿主必须
+   替换为四眼审批与真实开关权威。
+
 ## A2 有界只读同步
 
 A1 完成后按脚本输出的命令运行（需要 `MAILHUB_ACTIVATION_ALLOW_NETWORK=true`）：

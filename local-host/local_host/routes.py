@@ -113,12 +113,14 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     async def approval_request(request: Request) -> dict[str, object]:
         body = _json_body(request)
         action = body.get("action")
-        if not isinstance(action, dict) or not isinstance(action.get("action_id"), str):
-            raise HTTPException(
-                status_code=422, detail={"code": "approval_action_invalid"}
-            )
-        action_id = str(action["action_id"])
-        action_digest = _digest_bytes(_canonical_json(action))
+        # Local single-user semantics mirror the reference in-memory port: a
+        # confirmation may be created without an action binding (the caller
+        # cannot know the service-constructed action id in advance).  When an
+        # action IS bound, verification enforces the binding.
+        action_id = str(action.get("action_id", "")) if isinstance(action, dict) else ""
+        action_digest = (
+            _digest_bytes(_canonical_json(action)) if isinstance(action, dict) else ""
+        )
         confirmation_ref = stores.create_approval(
             tenant_id=str(body.get("tenant_id", "")),
             subject_id=str(body.get("subject_id", "")),
@@ -518,6 +520,18 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         return {}
 
     # ---- honest unconfigured surfaces ----------------------------------------
+
+    @router.post("/v1/mail-host/kill-switch/check", dependencies=[service_auth])
+    async def kill_switch_check(request: Request) -> dict[str, object]:
+        """Local kill-switch authority.
+
+        The local host has no four-eyes switch ledger; it always reports
+        ``allowed`` so the durable graph can start with outbound enabled.
+        A production host must replace this with a real switch authority.
+        """
+
+        del request
+        return {"allowed": True}
 
     @router.post("/v1/mail-host/ai/structure", dependencies=[service_auth])
     async def ai_structure(request: Request) -> JSONResponse:
