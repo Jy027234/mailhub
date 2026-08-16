@@ -155,6 +155,24 @@ python scripts\b4_autonomy.py
 （项目/任务/知识/跟进，全部 `requires_review=true`，绝不自动执行外部动作）。
 结果写入 `b4-autonomy-state.json`。
 
+## 日常使用闭环（每日摘要 + 审核应用 + 定时）
+
+```powershell
+# 1. 每日摘要：自主周期 + 生成 reports/daily-YYYY-MM-DD.html 报告
+python scripts\b4_daily.py
+
+# 2. 审核候选（报告里有可直接复制的命令）
+python scripts\b4_apply.py --candidate <id>          # 批准并应用（写入宿主任务/知识账本）
+python scripts\b4_apply.py --candidate <id> --reject # 拒绝
+#    未审核直接应用会被拒绝（approval_required），重复应用幂等。
+
+# 3. 注册每天早上 8 点的自动摘要（Windows 任务计划）
+pwsh -File scripts\install_daily_task.ps1
+
+# 4. 全量历史回填（按周窗口、有界、不推进增量游标）
+python scripts\b4_backfill.py --start 2025-01-01
+```
+
 ## A2 有界只读同步
 
 A1 完成后按脚本输出的命令运行（需要 `MAILHUB_ACTIVATION_ALLOW_NETWORK=true`）：

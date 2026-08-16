@@ -380,6 +380,21 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > shadow/canary、成本/延迟与生产模型网关治理仍属 `MAIL-AI-010/011/012/013`，
 > 不因本地演示勾选。
 
+> **日常闭环增量（2026-08-16，B2 用户价值本地闭环补证）**：候选应用链首次真机走通：
+> `b4_apply.py` 批准+应用（宿主确认→review→apply），知识候选写入宿主知识账本
+> （`host_knowledge`：status approved + knowledge_ref + approved_at），项目候选写入
+> 宿主动作账本（`host_actions`：稳定 action_id + execution_id + result_ref），
+> 候选终态 `applied` 且 `application_result` 证据持久化；未审核直接 apply 被
+> `candidate_approval_required` 拒绝（fail-closed），重复应用幂等。新增
+> `b4_daily.py` 每日摘要（自主周期→今日新邮件/AI 提取事实/待审核候选+审核命令/今日已
+> 处理 → `reports/daily-*.html`，事实取自候选 payload 不再重复调用模型），
+> `install_daily_task.ps1` 已注册 Windows 计划任务（每日 08:00）；`b4_backfill.py`
+> 按周窗口全量回填（2026-01 起 33 窗口 0 失败，+4 封历史邮件，其余为重复；
+> 服务器对 INBOX 的 UID SEARCH 仅暴露约 56 封可见消息，与 SELECT 计数差异属服务器
+> 行为，待 MAIL-IMAP 服务器矩阵复核）。注意：同消息不同模型输出的再次分析会生成
+> 新候选（精确内容去重、附重复谱系），属设计内行为。以上均为本地宿主闭环证据；
+> `MAIL-PROJ-*/MAIL-KNOW-*` 的真实宿主写入仍待 CAPlatform。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

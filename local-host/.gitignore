@@ -8,3 +8,5 @@ __pycache__/
 b4-imap-state.json
 b4-send-state.json
 b4-autonomy-state.json
+b4-backfill-state.json
+reports/
