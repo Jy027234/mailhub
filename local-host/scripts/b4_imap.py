@@ -63,7 +63,7 @@ def _fail(step: str, response: httpx.Response) -> None:
 def wait_for_job(
     client: httpx.Client, headers: dict[str, str], job_id: str
 ) -> dict[str, Any]:
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
         response = client.get(
             f"{MAILHUB_URL}/v1/mail/sync-jobs/{job_id}", headers=headers
@@ -71,14 +71,15 @@ def wait_for_job(
         if response.status_code != 200:
             _fail("poll sync job", response)
         job = _data(response)
-        if job.get("status") in {"completed", "failed", "cancelled", "dead_letter"}:
+        if job.get("status") in {"succeeded", "failed", "cancelled", "retry_wait"}:
             return job
         time.sleep(2)
-    print(f"[FAIL] sync job {job_id} did not reach a terminal state in 120s")
+    print(f"[FAIL] sync job {job_id} did not reach a terminal state in 300s")
     sys.exit(1)
 
 
 def main() -> int:
+    load_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--username", default=os.environ.get("HOST_IMAP_USERNAME", ""))
     parser.add_argument(
@@ -89,7 +90,6 @@ def main() -> int:
     )
     parser.add_argument("--skip-analyze", action="store_true")
     args = parser.parse_args()
-    load_env()
 
     enabled = os.environ.get("MAILHUB_IMAP_ENABLED", "").strip().casefold() in {
         "1",
@@ -205,7 +205,7 @@ def main() -> int:
             f"[4] backfill {finished.get('status')}: fetched={finished.get('fetched_count')} "
             f"saved={finished.get('saved_count')} deleted={finished.get('deleted_count')}"
         )
-        if finished.get("status") != "completed":
+        if finished.get("status") != "succeeded":
             print(f"[FAIL] backfill error_code={finished.get('error_code')}")
             sys.exit(1)
 

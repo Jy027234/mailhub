@@ -15,7 +15,7 @@ import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response
@@ -521,9 +521,79 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
 
     @router.post("/v1/mail-host/ai/structure", dependencies=[service_auth])
     async def ai_structure(request: Request) -> JSONResponse:
-        del request
+        """Deterministic rules pass-through for the local host.
+
+        The local host owns no model gateway, so it re-runs MailHub's own
+        evidence-first deterministic analysis on the provided source and
+        returns the bounded AI_RESULT_SCHEMA shape with an explicit
+        ``model_ref``.  This keeps the durable graph honest: analysis is the
+        rules engine, never a fake model claim.
+        """
+
+        body = _json_body(request)
+        operation = body.get("operation")
+        source = body.get("source")
+        if operation != "mail.message.analyze" or not isinstance(source, dict):
+            raise HTTPException(
+                status_code=422, detail={"code": "ai_execution_input_invalid"}
+            )
+        message_id = source.get("message_id")
+        subject = source.get("subject")
+        body_text = source.get("body_text")
+        content_sha256 = source.get("content_sha256")
+        if not all(
+            isinstance(value, str)
+            for value in (message_id, subject, body_text, content_sha256)
+        ):
+            raise HTTPException(
+                status_code=422, detail={"code": "ai_execution_source_invalid"}
+            )
+        try:
+            parsed_id = UUID(str(message_id))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "ai_execution_source_invalid"}
+            ) from exc
+
+        from mailhub.domain import MailMessageProjection  # noqa: PLC0415 (bounded local import)
+        from mailhub.intelligence import (  # noqa: PLC0415
+            analyze_message as rules_analyze,
+        )
+
+        projection = MailMessageProjection(
+            message_id=parsed_id,
+            tenant_id=str(body.get("tenant_id", "b4-tenant")),
+            connection_id=uuid5(NAMESPACE_URL, f"mailhub:host-rules:{parsed_id}"),
+            thread_id=uuid5(NAMESPACE_URL, f"mailhub:host-rules-thread:{parsed_id}"),
+            provider_message_ref=f"host-rules:{parsed_id}",
+            internet_message_id=None,
+            sender_address="rules@mailhub.invalid",
+            recipient_addresses=("rules@mailhub.invalid",),
+            subject=str(subject)[:1000],
+            received_at=datetime.now(UTC),
+            body_text=str(body_text),
+            content_sha256=str(content_sha256),
+        )
+        result = rules_analyze(projection)
         return JSONResponse(
-            status_code=503, content={"code": "ai_execution_unconfigured"}
+            content={
+                "result": {
+                    "summary": result.summary,
+                    "action_candidates": [
+                        dict(item) for item in result.action_candidates
+                    ],
+                    "knowledge_candidate": (
+                        dict(result.knowledge_candidate)
+                        if result.knowledge_candidate is not None
+                        else None
+                    ),
+                    "confidence": result.confidence,
+                    "model_ref": "mailhub-rules-pass-through-v1",
+                    "decisions": list(result.decisions),
+                    "risks": list(result.risks),
+                    "commitments": list(result.commitments),
+                }
+            }
         )
 
     @router.post("/v1/mail-host/security/av-scan", dependencies=[service_auth])

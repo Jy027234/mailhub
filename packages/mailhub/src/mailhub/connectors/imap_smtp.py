@@ -119,10 +119,19 @@ class ImapSmtpConnector(ProviderConnector):
                 try:
                     if sync_filter is None:
                         return await asyncio.to_thread(
-                            self._sync_blocking, credential, cursor, limit
+                            self._sync_blocking,
+                            credential,
+                            cursor,
+                            limit,
+                            connection.email_address,
                         )
                     return await asyncio.to_thread(
-                        self._sync_blocking, credential, cursor, limit, sync_filter
+                        self._sync_blocking,
+                        credential,
+                        cursor,
+                        limit,
+                        connection.email_address,
+                        sync_filter,
                     )
                 except ProviderFailureError as exc:
                     last_error = exc
@@ -162,6 +171,7 @@ class ImapSmtpConnector(ProviderConnector):
         credential: Mapping[str, str],
         cursor: str | None,
         limit: int,
+        mailbox_address: str,
         sync_filter: ProviderSyncFilter | None = None,
     ) -> ProviderSyncPage:
         username = _credential(credential, "username")
@@ -218,9 +228,19 @@ class ImapSmtpConnector(ProviderConnector):
                     raise ProviderFailureError("imap_fetch_failed")
                 raw_message = _extract_rfc822(fetch_data)
                 if len(raw_message) > _MAX_MESSAGE_BYTES:
-                    continue
+                    # Never advance the cursor past an unfetched message: a
+                    # silent skip would drop it from every future incremental
+                    # pass.  Fail the batch so an operator can widen the bound
+                    # or exclude the folder deliberately.
+                    raise ProviderFailureError("imap_message_too_large")
                 messages.append(
-                    _parse_message(raw_message, uid_validity, uid, active_filter.folder_ref)
+                    _parse_message(
+                        raw_message,
+                        uid_validity,
+                        uid,
+                        active_filter.folder_ref,
+                        fallback_recipient=mailbox_address,
+                    )
                 )
             next_cursor = f"{uid_validity}:{highest_uid}"
             if highest_modseq is not None:
@@ -278,10 +298,27 @@ class ImapSmtpConnector(ProviderConnector):
         )
 
 
-def _parse_message(raw: bytes, uid_validity: str, uid: int, folder: str) -> ProviderMessage:
+def _parse_message(
+    raw: bytes,
+    uid_validity: str,
+    uid: int,
+    folder: str,
+    fallback_recipient: str | None = None,
+) -> ProviderMessage:
     parsed = BytesParser(policy=policy.default).parsebytes(raw)
     sender = _first_address(parsed.get("From", ""))
+    if not sender:
+        # The envelope sender is the authoritative fallback when the From
+        # header is absent or unparseable.
+        sender = _first_address(parsed.get("Return-Path", ""))
     recipients = tuple(address for _, address in getaddresses(parsed.get_all("To", [])) if address)
+    if not recipients and fallback_recipient:
+        # A message delivered to the connected mailbox is a recipient by
+        # definition, even when the To header is empty (BCC distribution is
+        # common in business mail).  Normalize it like any other address.
+        normalized = fallback_recipient.strip().casefold()
+        if normalized:
+            recipients = (normalized,)
     cc_addresses = tuple(
         address for _, address in getaddresses(parsed.get_all("Cc", [])) if address
     )
@@ -383,13 +420,20 @@ def _first_text(value: list[bytes] | tuple[bytes, ...] | object) -> str:
 
 
 def _uid_validity(client: imaplib.IMAP4_SSL, select_data: object) -> str:
-    """Read the server UIDVALIDITY response code; never use message count."""
+    """Read the server UIDVALIDITY response code; never use message count.
+
+    Modern imaplib ``response("UIDVALIDITY")`` returns ``(code, data)`` where
+    the first element is the response code itself (``"UIDVALIDITY"``) rather
+    than the historical ``"OK"`` tag, so the data payload is the only reliable
+    signal.  A missing or empty response code fails closed.
+    """
 
     try:
-        status, data = client.response("UIDVALIDITY")
+        _status, data = client.response("UIDVALIDITY")
     except (imaplib.IMAP4.error, OSError):
-        status, data = "", None
-    if status == "OK":
+        _status, data = "", None
+    del _status
+    if isinstance(data, (list, tuple)):
         value = _first_text(data)
         if value != "0":
             return value
@@ -444,10 +488,12 @@ def _capability_names(client: imaplib.IMAP4_SSL) -> frozenset[str]:
 
 def _highest_modseq(client: imaplib.IMAP4_SSL) -> int | None:
     try:
-        status, data = client.response("HIGHESTMODSEQ")
+        _status, data = client.response("HIGHESTMODSEQ")
     except (imaplib.IMAP4.error, OSError):
         return None
-    if status != "OK":
+    del _status
+    # Same modern-imaplib contract as UIDVALIDITY: the data payload decides.
+    if not isinstance(data, (list, tuple)):
         return None
     value = _first_text(data)
     try:

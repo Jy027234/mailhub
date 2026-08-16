@@ -353,12 +353,50 @@ async def test_knowledge_safety_and_unconfigured_surfaces(
     assert response.json()["decision"]["rights_state"] == "approved"
 
     for path in (
-        "/v1/mail-host/ai/structure",
         "/v1/mail-host/security/av-scan",
         "/v1/mail-host/security/dlp-check",
     ):
         response = await client.post(path, headers=_auth(), json={})
         assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_ai_structure_is_deterministic_rules_pass_through(
+    client: httpx.AsyncClient,
+) -> None:
+    from mailhub.domain import digest_text
+
+    body = (
+        "决定：下周一前完成供应商切换。\n"
+        "风险：库存不足。\n"
+        "承诺：我们将在周三前发出询价。\n"
+        "项目 ref: PRJ-2026-08"
+    )
+    response = await client.post(
+        "/v1/mail-host/ai/structure",
+        headers=_auth(),
+        json={
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+            "operation": "mail.message.analyze",
+            "source": {
+                "message_id": "00000000-0000-0000-0000-000000000001",
+                "content_sha256": digest_text(body),
+                "subject": "项目A周会：决定将供应商切换至B公司",
+                "body_text": body,
+                "baseline": {},
+            },
+            "schema": {},
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["model_ref"] == "mailhub-rules-pass-through-v1"
+    assert result["summary"]
+    assert result["decisions"]
+    assert result["risks"]
+    assert result["commitments"]
+    assert 0 <= result["confidence"] <= 1
 
 
 @pytest.mark.asyncio

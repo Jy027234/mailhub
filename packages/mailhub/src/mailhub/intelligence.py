@@ -484,8 +484,17 @@ def sanitize_text(value: str) -> str:
 
 
 def summarize(value: str, *, maximum: int = 600) -> str:
+    """Return a summary bounded to ``maximum`` characters including ellipsis.
+
+    The AI merge contract rejects summaries longer than 600 characters, so a
+    truncated result must reserve one character for the ellipsis instead of
+    returning ``maximum + 1``.
+    """
+
     compact = " ".join(value.split())
-    return compact[:maximum] + ("…" if len(compact) > maximum else "")
+    if len(compact) > maximum:
+        return compact[: maximum - 1] + "…"
+    return compact
 
 
 def _current_message_text(value: str) -> str:

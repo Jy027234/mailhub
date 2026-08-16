@@ -692,21 +692,65 @@ def test_imap_parser_bounds_plain_text_and_uidvalidity_cursor() -> None:
     assert _same_uidvalidity("77:8", "77") is True
 
 
+def test_imap_parser_falls_back_for_empty_to_and_missing_from() -> None:
+    # Business BCC mail commonly arrives with an empty To header; the
+    # connected mailbox is a recipient by definition.  A missing From falls
+    # back to the envelope Return-Path instead of failing the whole batch.
+    bcc_message = EmailMessage()
+    bcc_message["From"] = "Supplier <supplier@example.test>"
+    bcc_message["To"] = ""
+    bcc_message["Subject"] = "BCC RFQ"
+    bcc_message["Date"] = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    bcc_message.set_content("bcc body")
+    parsed = _parse_message(
+        bcc_message.as_bytes(), "77", 10, "INBOX", fallback_recipient="Owner@Example.Test"
+    )
+    assert parsed.sender_address == "supplier@example.test"
+    assert parsed.recipient_addresses == ("owner@example.test",)
+
+    return_path_message = EmailMessage()
+    return_path_message["Return-Path"] = "<bounce@example.test>"
+    return_path_message["To"] = "owner@example.test"
+    return_path_message["Subject"] = "Envelope sender"
+    return_path_message.set_content("body")
+    parsed = _parse_message(return_path_message.as_bytes(), "77", 11, "INBOX")
+    assert parsed.sender_address == "bounce@example.test"
+
+    broken = EmailMessage()
+    broken["To"] = "owner@example.test"
+    broken["Subject"] = "No sender anywhere"
+    broken.set_content("body")
+    with pytest.raises(ProviderFailureError, match="imap_message_address_missing"):
+        _parse_message(broken.as_bytes(), "77", 12, "INBOX")
+
+
 def test_imap_cursor_uses_uidvalidity_response_not_message_count() -> None:
     class FakeClient:
         def response(self, name: str) -> tuple[str, list[bytes]]:
             assert name == "UIDVALIDITY"
-            return "OK", [b"77"]
+            # Modern imaplib returns the response code itself as the first
+            # element ("UIDVALIDITY"), not the historical "OK" tag.  The
+            # connector must rely on the data payload (see real-server
+            # conformance against imap.qiye.163.com).
+            return "UIDVALIDITY", [b"77"]
 
     assert _uid_validity(FakeClient(), [b"999"]) == "77"  # type: ignore[arg-type]
 
     class MissingResponse:
-        def response(self, name: str) -> tuple[str, list[bytes]]:
+        def response(self, name: str) -> tuple[str, list[bytes] | None]:
             del name
-            return "NO", []
+            return "UIDVALIDITY", None
 
     with pytest.raises(ProviderFailureError, match="uidvalidity_missing"):
         _uid_validity(MissingResponse(), [b"999"])  # type: ignore[arg-type]
+
+    class EmptyResponse:
+        def response(self, name: str) -> tuple[str, list[bytes]]:
+            del name
+            return "UIDVALIDITY", []
+
+    with pytest.raises(ProviderFailureError, match="uidvalidity_missing"):
+        _uid_validity(EmptyResponse(), [b"999"])  # type: ignore[arg-type]
 
 
 def test_imap_modseq_cursor_and_partial_fetch_fail_closed() -> None:
@@ -728,9 +772,15 @@ async def test_imap_sync_retries_transient_disconnect_with_bound(
     )
     attempts = 0
 
-    def flaky(credential: dict[str, str], cursor: str | None, limit: int) -> ProviderSyncPage:
+    def flaky(
+        credential: dict[str, str],
+        cursor: str | None,
+        limit: int,
+        mailbox_address: str,
+        sync_filter: object = None,
+    ) -> ProviderSyncPage:
         nonlocal attempts
-        del credential, cursor, limit
+        del credential, cursor, limit, mailbox_address, sync_filter
         attempts += 1
         if attempts < 3:
             raise ProviderFailureError("imap_provider_unavailable")

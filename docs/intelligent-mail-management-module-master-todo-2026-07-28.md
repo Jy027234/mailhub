@@ -340,6 +340,20 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > 成功切片待真实应用密码执行。真实 IMAP 服务器矩阵/IDLE 与 SMTP 对账仍属
 > `MAIL-IMAP-002/004/005/006`，不因本地预演勾选。
 
+> **真实邮箱切片完成（2026-08-16，网易企业邮箱 imap.qiye.163.com:993）**：用真实
+> 企业邮箱（授权码入库、只读）完成首个真机价值链验证：backfill **fetched=50
+> saved=50**（幂等键重放同 job_ref）、增量 **duplicate=50 saved=0**、45 线程/50
+> 消息投影、50/50 分析成功、1 个知识候选持久化（送修协议邮件链，其余按置信度门槛
+> 保守 abstain）。真机暴露并修复 4 个真实缺陷：① 现代 imaplib `response()` 返回
+> `(code, data)` 而非历史 `("OK", data)`，`_uid_validity`/`_highest_modseq` 误判为
+> 缺失（任何真实服务器必失败）；② BCC 群发邮件空 `To` 头使整批 fail——收件人回退
+> 连接邮箱地址、缺 `From` 回退 `Return-Path`；③ 超大邮件被静默跳过且游标前进造成
+> 数据丢失——改 fail-closed；④ `summarize()` 截断返回 601 字符违反 AI merge ≤600
+> 合同——长邮件分析失败。门禁：MailHub **340 tests**、local-host **12 tests**
+> 全绿。本地宿主 AI 端口为确定性规则直通（`model_ref=mailhub-rules-pass-through-v1`），
+> 不伪装模型输出。以上是 IMAP 传输的真实运行证据，不构成 Gmail REST (M2) 激活；
+> `MAIL-IMAP-002/004/005/006` 的服务器矩阵/IDLE/SMTP 对账仍开放。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

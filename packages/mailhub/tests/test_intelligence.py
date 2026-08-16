@@ -9,6 +9,7 @@ from mailhub.intelligence import (
     calibrate_confidence,
     merge_ai_result,
     sanitize_text,
+    summarize,
 )
 
 
@@ -27,6 +28,17 @@ def _message(body: str) -> MailMessageProjection:
         body_text=body,
         content_sha256=digest_text(body),
     )
+
+
+def test_summarize_never_exceeds_the_ai_merge_contract_bounds() -> None:
+    # The AI merge contract rejects summaries longer than 600 characters;
+    # a truncated summary must reserve room for the ellipsis (regression:
+    # it used to return 601 and break long-message analysis).
+    short = summarize("hello world")
+    assert short == "hello world"
+    long = summarize(" ".join(f"word-{index:03d}" for index in range(300)))
+    assert len(long) <= 600
+    assert long.endswith("…")
 
 
 def test_intelligence_emits_candidates_with_evidence_only() -> None:
