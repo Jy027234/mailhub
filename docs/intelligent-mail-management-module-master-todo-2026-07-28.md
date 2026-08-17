@@ -415,6 +415,13 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > **18 tests**、verify_all 9 步全绿。备注：阿里教育网关间歇 ReadTimeout（45s 回退
 > 规则，功能不受损但延迟升高）——`MAIL-AI-010` 的网关治理证据仍开放。
 
+> **模型网关切换增量（2026-08-17）**：教育网关持续 ReadTimeout 后切换到用户新配置的
+> OpenAI 兼容网关 `https://tk.qyb.mom/v1`。排查记录：凭据文件中的"grok / GPT-PRO"
+> 是分组名而非 API 模型 ID（`GET /v1/models` 查询实际 ID 为 grok-4.5/4.6 与
+> gpt-5.5/5.6 系列；gpt-5.6 实测 502 上游故障），最终启用 **grok-4.6**。单封分析
+> `mode=ai_enriched`、`model_ref=grok-4.6`，摘要质量正常；每日周期 completed。
+> `.env.example` 已注明"填 API 模型 ID 而非分组名"。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。
