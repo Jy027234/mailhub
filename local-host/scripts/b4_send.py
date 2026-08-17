@@ -25,6 +25,11 @@ TENANT = "b4-tenant"
 SUBJECT = "b4-user"
 
 
+def _api_auth_header() -> dict[str, str]:
+    token = os.environ.get("MAILHUB_API_AUTH_TOKEN", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def load_env() -> None:
     env_file = Path(__file__).resolve().parents[1] / ".env"
     if not env_file.exists():
@@ -77,7 +82,11 @@ def main() -> int:
     host_headers = {
         "Authorization": f"Bearer {os.environ['MAILHUB_HOST_SERVICE_TOKEN']}"
     }
-    mail_headers = {"X-MailHub-Tenant": TENANT, "X-MailHub-Subject": SUBJECT}
+    mail_headers = {
+        "X-MailHub-Tenant": TENANT,
+        "X-MailHub-Subject": SUBJECT,
+        **_api_auth_header(),
+    }
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
     with httpx.Client(timeout=60.0, follow_redirects=False) as client:

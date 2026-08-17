@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -31,6 +32,7 @@ from local_host.ai import (
 )
 from local_host.auth import make_service_auth
 from local_host.config import HostSettings
+from local_host.dlp import evaluate_text
 from local_host.stores import LocalStores, StoreError
 
 logger = logging.getLogger("local-host")
@@ -90,6 +92,11 @@ async def _mailhub_post(
                 "Accept": "application/json",
                 "X-MailHub-Tenant": tenant_id,
                 "X-MailHub-Subject": subject_id,
+                **(
+                    {"Authorization": f"Bearer {os.environ['MAILHUB_API_AUTH_TOKEN']}"}
+                    if os.environ.get("MAILHUB_API_AUTH_TOKEN")
+                    else {}
+                ),
             },
             json=dict(body),
         )
@@ -365,13 +372,27 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
             raise HTTPException(
                 status_code=422, detail={"code": "knowledge_candidate_invalid"}
             )
-        return {
-            "decision": {
-                "security_state": "cleared",
-                "rights_state": "approved",
-                "gate_ref": f"gate_{_digest_bytes(_canonical_json(body))[:16]}",
-            }
+        candidate = body.get("candidate")
+        if not isinstance(candidate, dict):
+            raise HTTPException(
+                status_code=422, detail={"code": "knowledge_candidate_invalid"}
+            )
+        # Real local DLP: pattern-detect sensitive data in the candidate
+        # payload.  A hit quarantines the candidate (apply fails closed).
+        text = json.dumps(candidate, ensure_ascii=False, default=str)
+        decision = evaluate_text(
+            text, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None
+        )
+        decision_payload: dict[str, object] = {
+            "security_state": decision.security_state,
+            "rights_state": decision.rights_state,
+            "gate_ref": f"gate_{_digest_bytes(_canonical_json(body))[:16]}",
         }
+        if decision.categories:
+            decision_payload["dlp_categories"] = list(decision.categories)
+            decision_payload["dlp_counts"] = dict(decision.counts)
+        decision_payload["scanner"] = decision.scanner
+        return {"decision": decision_payload}
 
     @router.post(
         "/v1/mail-host/knowledge/lifecycle/revoke", dependencies=[service_auth]
@@ -657,15 +678,42 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
 
     @router.post("/v1/mail-host/security/av-scan", dependencies=[service_auth])
     async def av_scan(request: Request) -> JSONResponse:
-        del request
+        body = _json_body(request)
+        content = body.get("content")
+        if not isinstance(content, str):
+            raise HTTPException(
+                status_code=422, detail={"code": "av_scan_input_invalid"}
+            )
+        decision = evaluate_text(
+            content, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None
+        )
         return JSONResponse(
-            status_code=503, content={"code": "av_scanner_unconfigured"}
+            content={
+                "status": "clean"
+                if decision.security_state == "cleared"
+                else "quarantined",
+                "scanner": decision.scanner,
+                "categories": list(decision.categories),
+            }
         )
 
     @router.post("/v1/mail-host/security/dlp-check", dependencies=[service_auth])
     async def dlp_check(request: Request) -> JSONResponse:
-        del request
-        return JSONResponse(status_code=503, content={"code": "dlp_unconfigured"})
+        body = _json_body(request)
+        content = body.get("content")
+        if not isinstance(content, str):
+            raise HTTPException(status_code=422, detail={"code": "dlp_input_invalid"})
+        decision = evaluate_text(
+            content, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None
+        )
+        return JSONResponse(
+            content={
+                "security_state": decision.security_state,
+                "categories": list(decision.categories),
+                "counts": dict(decision.counts),
+                "scanner": decision.scanner,
+            }
+        )
 
     # ---- browser-facing OAuth walk ------------------------------------------
 

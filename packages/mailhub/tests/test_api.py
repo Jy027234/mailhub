@@ -1216,6 +1216,46 @@ def test_api_exposes_pauseable_autonomy_run_contract() -> None:
     assert client.get("/v1/mail/autonomy/runs", headers=headers).json()["data"]
 
 
+def test_api_auth_token_is_required_when_configured() -> None:
+    settings = MailHubSettings(
+        environment="development",
+        api_auth_token=SecretStr("a" * 32),
+    )
+    service = MailService(
+        InMemoryMailRepository(), connectors={ProviderName.SANDBOX: SandboxConnector()}
+    )
+    client = TestClient(create_app(service, runtime_settings=settings))
+    base_headers = {"X-MailHub-Tenant": "tenant-1", "X-MailHub-Subject": "user-1"}
+
+    missing = client.get("/v1/mail/connections", headers=base_headers)
+    assert missing.status_code == 401
+    assert missing.json()["detail"]["code"] == "api_auth_token_invalid"
+
+    wrong = client.get(
+        "/v1/mail/connections",
+        headers={**base_headers, "Authorization": "Bearer " + "b" * 32},
+    )
+    assert wrong.status_code == 401
+
+    valid = client.get(
+        "/v1/mail/connections",
+        headers={**base_headers, "Authorization": "Bearer " + "a" * 32},
+    )
+    assert valid.status_code == 200
+
+
+def test_api_auth_token_absent_keeps_host_identity_only_mode() -> None:
+    service = MailService(
+        InMemoryMailRepository(), connectors={ProviderName.SANDBOX: SandboxConnector()}
+    )
+    client = TestClient(create_app(service))
+    response = client.get(
+        "/v1/mail/connections",
+        headers={"X-MailHub-Tenant": "tenant-1", "X-MailHub-Subject": "user-1"},
+    )
+    assert response.status_code == 200
+
+
 def test_oauth_registration_allows_loopback_dev_ports_only() -> None:
     endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
     # Loopback development callbacks may bind an explicit port (documented

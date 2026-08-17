@@ -21,6 +21,11 @@ HOST_URL = "http://127.0.0.1:8090"
 MAILHUB_URL = "http://127.0.0.1:8000"
 
 
+def _api_auth_header() -> dict[str, str]:
+    token = os.environ.get("MAILHUB_API_AUTH_TOKEN", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def load_env() -> None:
     env_file = Path(__file__).resolve().parents[1] / ".env"
     if not env_file.exists():
@@ -210,6 +215,7 @@ def main() -> int:
         mailhub_headers = {
             "X-MailHub-Tenant": "b4-tenant",
             "X-MailHub-Subject": "b4-user",
+            **_api_auth_header(),
         }
         capabilities = client.get(
             f"{MAILHUB_URL}/v1/mail/providers/capabilities", headers=mailhub_headers

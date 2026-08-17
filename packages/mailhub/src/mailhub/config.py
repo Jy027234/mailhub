@@ -35,6 +35,11 @@ class MailHubSettings(BaseModel):
     provider_notification_verifier_endpoint: str | None = None
     kill_switch_endpoint: str | None = None
     oauth_state_signing_secret: SecretStr | None = None
+    # Optional client->API bearer token.  When set, every /v1/mail/* request
+    # must present it (constant-time compare) in addition to the host identity
+    # headers; unset preserves the host-identity-only mode for controlled
+    # local graphs.  This token never replaces the Host Identity port.
+    api_auth_token: SecretStr | None = None
     gmail_client_id: str | None = None
     gmail_authorization_endpoint: str | None = None
     gmail_redirect_uris: tuple[str, ...] = ()
@@ -111,6 +116,7 @@ class MailHubSettings(BaseModel):
             ),
             kill_switch_endpoint=os.getenv("MAILHUB_KILL_SWITCH_ENDPOINT"),
             oauth_state_signing_secret=_env_secret("MAILHUB_OAUTH_STATE_SIGNING_SECRET"),
+            api_auth_token=_env_secret("MAILHUB_API_AUTH_TOKEN"),
             gmail_client_id=os.getenv("MAILHUB_GMAIL_CLIENT_ID"),
             gmail_authorization_endpoint=os.getenv("MAILHUB_GMAIL_AUTHORIZATION_ENDPOINT"),
             gmail_redirect_uris=_env_tuple(

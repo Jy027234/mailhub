@@ -389,3 +389,106 @@ async def test_migration_controller_requires_ordered_flags_and_single_sender() -
         "mail.migration.rollback_completed",
     ]
     assert all("body" not in event.to_dict() for event in controller.events)
+
+
+class _MutableAiExecution:
+    """Fake model gateway whose output changes per call (regression driver)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def structure(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        operation: str,
+        source: Mapping[str, object],
+        schema: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        del tenant_id, subject_id, operation, schema
+        baseline = source.get("baseline", {})
+        assert isinstance(baseline, dict)
+        self.calls += 1
+        return {
+            "summary": f"模型摘要第 {self.calls} 版",
+            "action_candidates": [
+                {
+                    "action_type": "follow_up",
+                    "project_refs": list(baseline.get("project_refs", [])),
+                    "task_refs": list(baseline.get("task_refs", [])),
+                    "due_date_refs": list(baseline.get("date_refs", [])),
+                    "decisions": [f"第 {self.calls} 版决定"],
+                    "risks": list(baseline.get("risks", [])),
+                    "commitments": list(baseline.get("commitments", [])),
+                    "source_message_id": str(source.get("message_id", "")),
+                    "confidence": 0.9,
+                    "requires_review": True,
+                }
+            ],
+            "knowledge_candidate": None,
+            "confidence": 0.9,
+            "model_ref": "mutable-test-model",
+            "decisions": [],
+            "risks": [],
+            "commitments": [],
+        }
+
+
+@pytest.mark.asyncio
+async def test_reanalysis_assigns_fresh_revisions_instead_of_unique_conflict() -> None:
+    """Regression: a second analysis of the same message must not violate the
+    (message, type, revision) unique key when the model output changed.
+    """
+
+    repository = InMemoryMailRepository()
+    connector = SandboxConnector()
+    ai = _MutableAiExecution()
+    service = MailService(
+        repository,
+        connectors={ProviderName.SANDBOX: connector},
+        ai_execution=ai,
+        object_store=InMemoryObjectStore(),
+    )
+    connection = await service.create_connection(
+        tenant_id="tenant-1",
+        subject_id="user-1",
+        provider=ProviderName.SANDBOX,
+        email_address="user@example.test",
+        credential_ref="sandbox",
+    )
+    body = "Project: AL-42 must close by 2026-08-20. Please follow up."
+    await connector.seed(
+        ProviderMessage(
+            provider_message_ref="m-reanalyze",
+            provider_thread_ref="t-reanalyze",
+            internet_message_id="<m-reanalyze@example.test>",
+            sender_address="buyer@example.test",
+            recipient_addresses=("user@example.test",),
+            subject="Reanalysis",
+            received_at=datetime.now(UTC),
+            body_text=body,
+            body_object_ref=None,
+            content_sha256=digest_text(body),
+        )
+    )
+    await service.sync_connection(
+        tenant_id="tenant-1", subject_id="user-1", connection_id=connection.connection_id
+    )
+    message = (await repository.list_messages(tenant_id="tenant-1", subject_id="user-1"))[0]
+
+    await service.analyze_message(
+        tenant_id="tenant-1", subject_id="user-1", message_id=message.message_id
+    )
+    await service.analyze_message(
+        tenant_id="tenant-1", subject_id="user-1", message_id=message.message_id
+    )
+
+    project_candidates = await service.list_candidates(
+        tenant_id="tenant-1", subject_id="user-1", candidate_type=CandidateType.PROJECT
+    )
+    revisions = sorted(item.revision for item in project_candidates)
+    assert revisions == [1, 2]
+    assert len({item.candidate_id for item in project_candidates}) == 2
+    second = next(item for item in project_candidates if item.revision == 2)
+    assert second.payload.get("action_dedupe_status") == "duplicate_requires_review"

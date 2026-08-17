@@ -36,6 +36,11 @@ padding:0 .5rem;font-size:.8rem;margin-right:.4rem}
 """
 
 
+def _api_auth_header() -> dict[str, str]:
+    token = os.environ.get("MAILHUB_API_AUTH_TOKEN", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def load_env() -> None:
     env_file = Path(__file__).resolve().parents[1] / ".env"
     if not env_file.exists():
@@ -87,7 +92,11 @@ def run_autonomy(
 
 def main() -> int:
     load_env()
-    headers = {"X-MailHub-Tenant": TENANT, "X-MailHub-Subject": SUBJECT}
+    headers = {
+        "X-MailHub-Tenant": TENANT,
+        "X-MailHub-Subject": SUBJECT,
+        **_api_auth_header(),
+    }
     today = datetime.now(UTC)
     today_str = today.strftime("%Y-%m-%d")
 

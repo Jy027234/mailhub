@@ -1,0 +1,71 @@
+name: mailhub-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  mailhub:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mailhub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Tests
+        run: python -m pytest -q --no-header
+      - name: Ruff
+        run: |
+          ruff check src tests scripts
+          ruff format --check src tests scripts
+      - name: Mypy
+        run: mypy src tests
+      - name: Script gates
+        run: |
+          python scripts/check_import_boundaries.py
+          python scripts/check_secrets.py --path src
+          python scripts/evaluate_synthetic.py
+          python scripts/test_migrations.py
+          python scripts/check_provenance.py --ledger source-ledger.yaml
+          python scripts/check_license_gate.py
+
+  local-host:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: local-host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -e "../packages/mailhub[dev]"
+          pip install cryptography
+      - name: Tests
+        run: python -m pytest -q tests --no-header
+      - name: Ruff
+        run: |
+          ruff check local_host tests scripts
+          ruff format --check local_host tests scripts
+      - name: Mypy
+        run: python -m mypy local_host --ignore-missing-imports
+
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tests
+        run: python -m pytest -q deployment/tests --no-header
+        env:
+          PYTHONPATH: deployment

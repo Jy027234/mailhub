@@ -395,6 +395,26 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 > 新候选（精确内容去重、附重复谱系），属设计内行为。以上均为本地宿主闭环证据；
 > `MAIL-PROJ-*/MAIL-KNOW-*` 的真实宿主写入仍待 CAPlatform。
 
+> **生产加固与重复候选修复增量（2026-08-17，MAIL-REL/MAIL-AI 加固）**：
+> ① API 鉴权：`MAILHUB_API_AUTH_TOKEN`（SecretStr，恒时比较）在配置后强制所有
+> `/v1/mail/*` 请求携带 Bearer 令牌（不取代 Host Identity 端口；未配置保持原模式）；
+> 全部 b4 脚本与宿主回调自动携带。② PostgreSQL 密码从 compose 默认值改为 .env
+> 注入的随机密码并完成轮换（ALTER USER + 连接验证）。③ 宿主知识安全门/AV/DLP
+> 端口从 503 桩升级为真实本地 DLP（身份证/银行卡/手机号/口令模式 + 批量邮箱检测，
+> 命中即隔离 → 知识候选 apply fail-closed；可选 HOST_CLAMAV_HOST 接 ClamAV）。④ CI：
+> 新增根级 `scripts/verify_all.ps1`（9 步全绿）与 `.github/workflows/ci.yml`
+> （mailhub/local-host/deployment 三 job）。⑤ wheel 构建证据关闭缺口
+> （`mailhub-0.1.0-py3-none-any.whl` 205KB）；`b4_backup.ps1` 完成首份备份
+> （pg_dump 自定义格式 + 宿主 SQLite + .env + reports，附恢复步骤）。
+> ⑥ 真机发现并修复重复候选缺陷：自主周期对已分析邮件的再次分析生成同
+> (message,type) revision=1 候选，触发唯一约束冲突（SQLAlchemy 把 23505 翻译为
+> 内部码 "gkpj" 泄露进 durable error_code），整轮 failed；修复为按 (message,type)
+> 递增分配 revision（谱系语义保留），非 MailHub 异常的错误码收口为
+> `autonomy_internal_error`/`sync_job_internal_error`，加回归测试
+> （模型输出变化 → revision 1/2 并存）。门禁：MailHub **343 tests**、local-host
+> **18 tests**、verify_all 9 步全绿。备注：阿里教育网关间歇 ReadTimeout（45s 回退
+> 规则，功能不受损但延迟升高）——`MAIL-AI-010` 的网关治理证据仍开放。
+
 ## 未勾选项复核（2026-07-29）
 
 本节用于交接时解释为什么仍有 `[ ]`；未勾选不表示遗漏，也不应仅因 Sandbox、fixture 或静态合同通过就改为 `[x]`。

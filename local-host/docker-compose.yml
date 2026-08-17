@@ -4,7 +4,7 @@ services:
     container_name: mailhub-b4-postgres
     environment:
       POSTGRES_USER: mailhub
-      POSTGRES_PASSWORD: mailhub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing in .env}
       POSTGRES_DB: mailhub
     ports:
       - "5433:5432"
@@ -18,3 +18,4 @@ services:
 
 volumes:
   postgres-data:
+

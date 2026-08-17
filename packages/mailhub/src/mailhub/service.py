@@ -2489,7 +2489,9 @@ class MailService:
                 error_code=SyncCancelledError.code,
             )
         except Exception as exc:
-            error_code = getattr(exc, "code", "sync_job_failed")
+            error_code = (
+                str(exc.code) if isinstance(exc, MailHubError) else "sync_job_internal_error"
+            )
             current = await self.repository.get_sync_job(tenant_id=tenant_id, job_id=job_id)
             if current is not None and current.status is SyncJobStatus.CANCELLED:
                 return current
@@ -2724,7 +2726,12 @@ class MailService:
             )
             return completed
         except Exception as exc:
-            error_code = str(getattr(exc, "code", "autonomy_run_failed"))
+            # Bounded durable error codes: MailHub taxonomy codes only.
+            # Opaque engine codes (e.g. SQLAlchemy's translated DBAPI code)
+            # must not leak into durable run state.
+            error_code = (
+                str(exc.code) if isinstance(exc, MailHubError) else "autonomy_internal_error"
+            )
             automatic_pause_reason: str | None = None
             automatic_pause_metadata: dict[str, object] = {}
             if isinstance(exc, AuthorizationError) and exc.message == "connection_not_active":
@@ -2867,7 +2874,9 @@ class MailService:
         existing_candidates = await self.repository.list_candidates(
             tenant_id=tenant_id, subject_id=subject_id, status=None, limit=200
         )
-        new_candidates = _deduplicate_candidates(candidates, existing_candidates)
+        new_candidates = _assign_candidate_revisions(
+            _deduplicate_candidates(candidates, existing_candidates), existing_candidates
+        )
         for candidate in new_candidates:
             await self.repository.save_candidate(candidate)
             candidate_event_type = {
@@ -5273,6 +5282,32 @@ def _thread_project_hint(candidates: list[MailActionCandidate]) -> str | None:
                 if isinstance(first, str) and first.strip():
                     return first.strip()[:200]
     return None
+
+
+def _assign_candidate_revisions(
+    candidates: tuple[MailActionCandidate, ...], existing: tuple[MailActionCandidate, ...]
+) -> tuple[MailActionCandidate, ...]:
+    """Give re-analyzed candidates fresh revisions per (message, type).
+
+    The candidate table enforces a unique (tenant, message, type, revision)
+    key, so a second analysis of the same message (e.g. a changed model
+    output) must not re-use revision 1.  Revisions continue after the
+    highest existing revision for the same message and type.
+    """
+
+    next_revision: dict[tuple[UUID, CandidateType], int] = {}
+    for item in existing:
+        key = (item.message_id, item.candidate_type)
+        next_revision[key] = max(next_revision.get(key, 0), item.revision)
+    result: list[MailActionCandidate] = []
+    for candidate in candidates:
+        key = (candidate.message_id, candidate.candidate_type)
+        revision = next_revision.get(key, 0) + 1
+        next_revision[key] = revision
+        result.append(
+            replace(candidate, revision=revision) if candidate.revision != revision else candidate
+        )
+    return tuple(result)
 
 
 def _candidates_from_result(

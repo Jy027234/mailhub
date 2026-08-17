@@ -23,6 +23,11 @@ TENANT = "b4-tenant"
 SUBJECT = "b4-user"
 
 
+def _api_auth_header() -> dict[str, str]:
+    token = os.environ.get("MAILHUB_API_AUTH_TOKEN", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def load_env() -> None:
     env_file = Path(__file__).resolve().parents[1] / ".env"
     if not env_file.exists():
@@ -54,7 +59,11 @@ def _fail(step: str, response: httpx.Response) -> None:
 
 def main() -> int:
     load_env()
-    headers = {"X-MailHub-Tenant": TENANT, "X-MailHub-Subject": SUBJECT}
+    headers = {
+        "X-MailHub-Tenant": TENANT,
+        "X-MailHub-Subject": SUBJECT,
+        **_api_auth_header(),
+    }
     replay_key = f"b4-autonomy-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
 
     with httpx.Client(timeout=900.0, follow_redirects=False) as client:

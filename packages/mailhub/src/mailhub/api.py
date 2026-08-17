@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import re
 from collections.abc import Mapping
@@ -474,6 +475,23 @@ def create_app(
         x_mailhub_subject: Annotated[str | None, Header(alias="X-MailHub-Subject")] = None,
     ) -> Context:
         context = await request_context(x_mailhub_tenant, x_mailhub_subject)
+        api_token = (
+            settings.api_auth_token.get_secret_value()
+            if settings.api_auth_token is not None
+            else None
+        )
+        if api_token is not None:
+            authorization = request.headers.get("Authorization", "")
+            scheme, _, token = authorization.partition(" ")
+            if (
+                scheme.casefold() != "bearer"
+                or not token
+                or not hmac.compare_digest(token.encode("utf-8"), api_token.encode("utf-8"))
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={"code": "api_auth_token_invalid"},
+                )
         identity_port = service.host_identity
         if identity_port is not None:
             capability = "mail.read" if request.method == "GET" else "mail.write"

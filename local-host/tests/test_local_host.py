@@ -389,9 +389,7 @@ async def test_kill_switch_allows_local_outbound(client: httpx.AsyncClient) -> N
 
 
 @pytest.mark.asyncio
-async def test_knowledge_safety_and_unconfigured_surfaces(
-    client: httpx.AsyncClient,
-) -> None:
+async def test_knowledge_safety_and_dlp_surfaces(client: httpx.AsyncClient) -> None:
     response = await client.post(
         "/v1/mail-host/knowledge/safety/evaluate",
         headers=_auth(),
@@ -401,7 +399,7 @@ async def test_knowledge_safety_and_unconfigured_surfaces(
             "message_id": "00000000-0000-0000-0000-000000000001",
             "content_sha256": "a" * 64,
             "candidate_id": "candidate-1",
-            "candidate": {},
+            "candidate": {"title": "普通邮件"},
             "evidence": [],
         },
     )
@@ -413,8 +411,42 @@ async def test_knowledge_safety_and_unconfigured_surfaces(
         "/v1/mail-host/security/av-scan",
         "/v1/mail-host/security/dlp-check",
     ):
-        response = await client.post(path, headers=_auth(), json={})
-        assert response.status_code == 503
+        response = await client.post(
+            path, headers=_auth(), json={"content": "普通内容"}
+        )
+        assert response.status_code == 200
+    dlp_response = await client.post(
+        "/v1/mail-host/security/dlp-check",
+        headers=_auth(),
+        json={"content": "身份证 110101199003078515 银行卡 6222020200112233445"},
+    )
+    assert dlp_response.status_code == 200
+    assert dlp_response.json()["security_state"] == "quarantined"
+    assert "cn_id_number" in dlp_response.json()["categories"]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_safety_quarantines_sensitive_candidates(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        "/v1/mail-host/knowledge/safety/evaluate",
+        headers=_auth(),
+        json={
+            "tenant_id": "tenant-1",
+            "subject_id": "user-1",
+            "message_id": "00000000-0000-0000-0000-000000000001",
+            "content_sha256": "a" * 64,
+            "candidate_id": "candidate-2",
+            "candidate": {"summary": "客户身份证 110101199003078515"},
+            "evidence": [],
+        },
+    )
+    assert response.status_code == 200
+    decision = response.json()["decision"]
+    assert decision["security_state"] == "quarantined"
+    assert decision["rights_state"] == "review_required"
+    assert "cn_id_number" in decision["dlp_categories"]
 
 
 @pytest.mark.asyncio
