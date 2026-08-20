@@ -1,6 +1,6 @@
 # 可复用智能邮件管理模块（MailHub）主待办
 
-状态：CAPlatform MailHub 工程 Beta 已完成（本地/宿主闭环与普通推送完成；M2/M3 真实 Provider 激活延后）
+状态：CAPlatform MailHub 工程 Beta 已完成（本地/宿主闭环与普通推送完成；M2/M3 真实 Provider 激活延后；国内发布路径以 IMAP/SMTP + 应用授权码为主，Gmail 出范围、Graph 可选低优先级）
 日期：2026-07-28  
 工作名称：`MailHub`（正式命名由 M0 ADR 确认）  
 当前唯一目标产品：CAPlatform
@@ -28,14 +28,16 @@
 | B1 | CAPlatform Host Credential Broker | 工程 Beta 已关闭：已实现 CAPlatform `/v1/mail-host/oauth/state|exchange` 与 `/credentials/resolve|refresh|revoke`、一次性加密 state、tenant/subject binding、服务 Bearer 鉴权、Gmail endpoint revoke、Graph 本地 token 销毁和审计；production/staging durable runtime 强制 PostgreSQL、显式 Provider、带服务鉴权的 Host Ports、零 Sandbox/内存 fallback | Provider 激活仍开放：宿主权威 Secret Manager/KMS、真实 Gmail/Graph code exchange/refresh/revoke、浏览器/MailHub DB 零 token 运行证明及 Graph consent 撤权证据 | `MAIL-GMAIL-001/002/007/009`、`MAIL-MS-001/002/009`、`MAIL-SEC-001/002` |
 | B2 | CAPlatform 本地用户价值闭环 | 已关闭（工程 Beta）：`/mail` 的已批准候选 apply 不再接受浏览器自造 approval ref；BFF 签发 tenant/subject/candidate/revision/action 绑定的短期 opaque ref。任务通过 Agentctl `ca.project.create_task` preflight/invoke 写入并保留 result/evidence；知识候选经本地 Sandbox 安全门、签名 scope/content gate 和正文/凭据泄漏拒绝后，加密进入 CAPlatform 宿主候选台账。两类写入均有幂等重放与冲突测试 | 真实知识源发布、生产 AV/DLP/rights、Gmail/Graph 邮件证据仍由 B4/B5/B6 验收；不得把本地候选台账称为已发布知识库 | `MAIL-UX-*`、`MAIL-PROJ-*`、`MAIL-KNOW-*` 的工程 Beta 子集 |
 | B3 | 本地发布与运行准备 | 已关闭：排除未纳入本提交的业务事件中心测试后，本地门为 MailHub 333、BFF 137、根项目 230、Web 10 tests；MailHub verify、Ruff、strict mypy、迁移/OpenAPI/provenance/license、Agentctl manifest validate、Web typecheck/build 绿色；MailHub 范围提交 `41f1204` 已普通推送到 `origin/codex/mailhub-caplatform-beta` | GitHub Actions 继续仅作远端待复验项；后续提交继续不得混入无关并行改动 | `MAIL-REL-*` 的工程 Beta 子集 |
-| B4 | Gmail A1/A2 真实只读纵切（延后） | connector/history/cursor/backfill/重试/证据校验已有本地合同；Provider 默认 disabled | 隔离 Gmail 账号真实 OAuth；`gmail.readonly`；有界 backfill + history 增量；重复运行幂等；refresh/revoke 后零访问；脱敏 bundle 通过 `--require-real` | M2 的 A1/A2 条目 |
-| B5 | Microsoft Graph A1/A2 真实只读纵切（延后） | connector/delta/cursor/backfill/重试/证据校验已有本地合同；Provider 默认 disabled | 隔离 Entra/M365 账号真实 OAuth；`Mail.Read offline_access`；有界 backfill + delta；重复运行幂等；refresh/revoke 后零访问；脱敏 bundle 通过 `--require-real` | M3 的 A1/A2 条目 |
+| B4 | Gmail A1/A2 真实只读纵切（国内出范围，延后） | connector/history/cursor/backfill/重试/证据校验已有本地合同；Provider 默认 disabled | 隔离 Gmail 账号真实 OAuth；`gmail.readonly`；有界 backfill + history 增量；重复运行幂等；refresh/revoke 后零访问；脱敏 bundle 通过 `--require-real` | M2 的 A1/A2 条目 |
+| B5 | Microsoft Graph A1/A2 真实只读纵切（可选低优先级，延后） | connector/delta/cursor/backfill/重试/证据校验已有本地合同；Provider 默认 disabled | 隔离 Entra/M365 账号真实 OAuth；`Mail.Read offline_access`；有界 backfill + delta；重复运行幂等；refresh/revoke 后零访问；脱敏 bundle 通过 `--require-real` | M3 的 A1/A2 条目 |
 | B6 | Provider 激活后的发布门与扩展波次 | 合同或本地实现不等于启用资格 | 真实 Provider E2E/撤权/回滚完成后，再分别评审 A3 push、SMTP/Provider send、L3A/L3B 自治、IMAP、第二宿主、旧系统迁移和 GA | M4/M5/M7/M9/MX/M11/M12 |
 
-当前 B0–B3 工程 Beta 路径已关闭；Gmail/Graph 不再阻塞本地后续开发。进入 Provider 激活阶段后，默认按 Gmail →
-Microsoft Graph 顺序执行，以缩小首次真实授权的故障面；若首批试点明确以 Microsoft 365 为主，只允许
-交换 B4/B5 顺序。A3 watch/change notification 不再是 A1/A2 的前置，首期采用 polling-only、
-`read_only=true`、`push_enabled=false`。
+当前 B0–B3 工程 Beta 路径已关闭；Gmail/Graph 不再阻塞本地后续开发。进入 Provider 激活阶段后，国内部署
+默认按 **IMAP/SMTP + 应用授权码**（QQ/163/网易企业/阿里企业/自建 IMAP）为主路径执行：先关闭
+`MAIL-IMAP-*`/`MAIL-SMTP-*` 的服务器矩阵与发送证据，再按需推进 Graph（世纪互联 O365，可选低优先级）。
+Gmail 在国内基本不可达，标记为**出范围**：保留 connector 代码与测试，但从发布阻断门中摘除，不要求
+真实 Gmail OAuth/邮箱证据即可国内发布。A3 watch/change notification 不再是只读纵切的前置，首期采用
+polling-only、`read_only=true`、`push_enabled=false`。
 
 GitHub Actions 当前只作为远端待复验信号，不作为开发阻塞条件。提交与推送使用普通 Git 模式，不创建
 自动 PR、不等待 Actions、不因计费/额度问题修改产品代码；本地门禁失败仍必须立即处理。
@@ -54,11 +56,11 @@ GitHub Actions 当前只作为远端待复验信号，不作为开发阻塞条�
 - [x] 本轮 MailHub 范围变更已以 `41f1204` 完成普通 Git commit/push，且未混入其他并行开发改动。
 - [x] Gmail/Graph、send、push、L3B 保持 disabled/unverified，不因缺少外部账号阻塞后续本地开发。
 
-### Provider 激活完成定义（当前延后，不属于工程 Beta 阻塞门）
+### Provider 激活完成定义（当前延后，不属于工程 Beta 阻塞门；国内路径以 IMAP/SMTP 授权码为主）
 
 只有同时满足以下条件，才可称为“CAPlatform 智能邮箱真实 Provider Beta 激活完成”：
 
-1. Gmail 与 Microsoft Graph 各有一个隔离账号完成真实 OAuth、只读 backfill、增量同步、refresh、revoke 和零访问证明。
+1. 至少一个国内真实邮箱（163/QQ/网易企业/阿里企业或自建 IMAP）完成真实授权码连接、只读增量同步、cursor 重建、刷新与撤权后零访问证明；Gmail 不在国内发布阻断范围，Graph（世纪互联 O365）仅在目标客户明确需要时作为可选低优先级补齐。
 2. CAPlatform `/mail` 可查看真实同步结果，但凭据、原始授权码和 refresh token 不进入浏览器、日志或 MailHub 关系库。
 3. 至少一封真实邮件完成“分析 → 任务候选 → 人工确认 → CAPlatform 任务写入”，并可从任务追溯邮件 evidence ref。
 4. 至少一封真实邮件完成“高价值识别 → 知识候选 → 人工确认 → 权威知识服务写入”，并通过去重、权限和撤回测试。
@@ -428,7 +430,7 @@ OAuth/Secret、用户、邮件/任务/知识权威数据继续留在 CAPlatform/
 
 | 类别 | 代表任务 | 保持未勾选的原因 | 关闭所需证据 |
 | --- | --- | --- | --- |
-| M2/M3 真实 Provider 激活门 | M2 全部 `MAIL-GMAIL-*`、M3 全部 `MAIL-MS-*`，以及依赖真实 Gmail/Graph 的 `MAIL-OUT-006`、`MAIL-REL-001/002` | 外部激活执行已延后；当前只有 connector 合同、只读安全门、OAuth 宿主边界与离线预检，尚无真实授权、隔离邮箱、watch/change notification、连续运行或撤权证据 | 后续恢复时按 [`mailhub-provider-activation-runbook.md`](mailhub-provider-activation-runbook.md) 完成对应阶段；每个条目同时具备代码、自动化测试、脱敏运行报告和责任人签字后才勾选 |
+| M2/M3 真实 Provider 激活门 | 国内主路径 `MAIL-IMAP-*`/`MAIL-SMTP-*`；`MAIL-MS-*` 降为可选低优先级；`MAIL-GMAIL-*` 移出国内发布阻断（出范围） | 外部激活执行已延后；IMAP/授权码已有网易企业邮箱真实只读 + 受控发送本地验证，QQ/网易企业/阿里企业/自建 IMAP 服务器矩阵与 IDLE、SMTP 对账仍缺真实证据；Gmail/Graph 仅保留 connector 合同、只读安全门与离线预检 | 国内发布按 [`mailhub-provider-activation-runbook.md`](mailhub-provider-activation-runbook.md) 完成 IMAP/SMTP 阶段；Graph 仅目标客户需要时再恢复；每个条目同时具备代码、自动化测试、脱敏运行报告和责任人签字后才勾选 |
 | Agentctl 外部门禁 | `MAIL-ARCH-011` | manifest validate/apply、handler loadability 和 doctor 已通过；真实 MailHub/Host endpoint 与模型环境未配置，smoke 必须保持失败而不能伪绿 | 配置真实宿主/模型端点，重新执行 init/validate/apply/doctor/smoke，并保留结果 |
 | 真实持久化/连接器 | `MAIL-IMAP-002/004/005/006`、`MAIL-SMTP-001/002`、`MAIL-CONN-001` | `MAIL-CORE-002` 与 `MAIL-CORE-015` 已有隔离 PostgreSQL/clean-room 合同证据；仍缺真实持久化 crash/fault 注入、IDLE/服务器矩阵、SMTP 对账及第三方 certification | 受控数据库/服务器演练、兼容证书、故障注入、发布版本兼容表 |
 | UI/SDK 发布验收 | `MAIL-UX-001` 至 `MAIL-UX-011`、`MAIL-DIST-003/004/008/009/012` | CAPlatform 页面、嵌入 UI、SDK、`MailHubStandalone` shell、服务端固定注册信息的 OAuth 向导和 metadata 合同已落地；standalone 签名发布、WCAG 审计、OpenAPI 代码生成/registry、完整搜索/附件/健康视图仍缺宿主和发布证据 | 发布产物、可访问性审计、宿主主题/慢网验证、SDK/Schema 兼容和运行手册 |
@@ -1406,9 +1408,10 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
 
 ### M2 — Gmail 真实只读接入
 
-> **状态：A0/A1/A2 激活准备中**：不再暂缓。Gmail connector、OAuth state/PKCE 宿主边界、
-> 只读/推送开关和离线预检已进入仓库；真实 OAuth、隔离邮箱、Pub/Sub watch、historyId
-> 长期对账、撤权和上线审核仍须按激活手册逐项取得证据。
+> **状态：国内发布出范围（out-of-scope domestic）**：Gmail 在国内基本不可达，不再作为国内发布阻断门。
+> Connector、OAuth state/PKCE 宿主边界、只读/推送开关和离线预检仍保留在仓库（provider-neutral、fail-closed、
+> 默认只读 + push 关闭），仅当出现海外/代理可达的明确客户需求时再按激活手册恢复 A1/A2 真实证据。
+> 下列 `MAIL-GMAIL-*` 条目保持未勾选，但不阻塞国内 IMAP/SMTP 主路径的发布。
 
 - [ ] **MAIL-GMAIL-001（P0/MH+SEC）**：创建隔离的 dev/test/prod OAuth app 方案；实现 PKCE/state、redirect allowlist、最小 scope 和 consent 说明。
   仓库已补齐 PKCE/state、服务端 endpoint/client/scope/redirect allowlist、只读 scope 预检（显式拒绝 Gmail 写 scope）、authorize 请求必需 scope、state-bound requested scope 和 host state store；callback 与直接 service create/activate/update-scopes/reauthorize 路径会拒绝 scope 漂移、缺少必需只读 scope 或 Gmail 写 scope；CAPlatform BFF 新增服务端固定注册信息的 provider readiness/authorize/callback 投影，浏览器不再提交 endpoint/client/scope，callback 不回传 credential_ref；真实 Google Cloud OAuth app、verification 和 consent 证据仍开放。
@@ -1433,9 +1436,10 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
 
 ### M3 — Microsoft Graph 真实只读接入
 
-> **状态：A0/A1/A2 激活准备中**：不再暂缓。Graph connector、OAuth state/PKCE 宿主边界、
-> 只读/推送开关和离线预检已进入仓库；真实 Entra OAuth、tenant consent、change notification、
-> delta 长期对账、撤权和上线审核仍须按激活手册逐项取得证据。
+> **状态：可选低优先级（optional low priority）**：国内仅在世纪互联 O365 客户明确需要时启用。
+> Graph connector、OAuth state/PKCE 宿主边界、只读/推送开关和离线预检仍保留在仓库；真实 Entra OAuth、
+> tenant consent、change notification、delta 长期对账、撤权和上线审核不再阻塞国内 IMAP/SMTP 主路径，
+> 需要时再按激活手册逐项取得证据。
 
 - [ ] **MAIL-MS-001（P0/MH+SEC）**：设计个人 Microsoft account/Entra tenant 的 OAuth app、PKCE/state、delegated scopes 和 tenant consent。
   仓库已支持 Graph endpoint/client/scope/redirect allowlist、`authority_tenant` 与 endpoint 首段绑定、只读预检（显式拒绝 Mail.Send/Mail.ReadWrite 等写 scope）、authorize 请求必需 scope、state-bound requested scope 和 callback scope 漂移拒绝；直接 service create/activate/update-scopes/reauthorize 路径复用同一只读 scope gate；CAPlatform BFF 仅以服务端注册信息启动授权并隐藏 credential_ref；真实 Entra app registration、publisher/tenant consent 和账号矩阵仍开放。
@@ -1456,7 +1460,11 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
 
 验收：真实个人/企业受控账号通过连接、增量、补偿、撤权和恢复；不把 delegated 权限误用为租户全邮箱权限。
 
-### M4 — IMAP/SMTP 与 Provider 扩展框架
+### M4 — IMAP/SMTP 与 Provider 扩展框架（国内发布主路径）
+
+> **状态：国内发布首要门槛**：IMAP/SMTP + 应用授权码是国内主路径。网易企业邮箱已在本机完成
+> 真实只读切片与受控发送闭环；QQ/网易企业/阿里企业/自建 IMAP 的服务器矩阵、IDLE、folder rename/delete、
+> SMTP 对账与附件 AV 扫描仍须在发布前关闭。下列 `MAIL-IMAP-*`/`MAIL-SMTP-*` 未勾选项是国内发布阻断项。
 
 - [x] **MAIL-IMAP-001（P0/MH）**：实现 TLS、证书验证、capability negotiation、XOAUTH2/app-password SecretRef；禁止明文协议和日志凭据。
 - [ ] **MAIL-IMAP-002（P0/MH）**：实现 UIDVALIDITY/UID/MODSEQ、IDLE、poll fallback、folder rename/delete 和 cursor 重建。
