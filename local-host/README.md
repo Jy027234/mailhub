@@ -1,8 +1,11 @@
-# MailHub B4 本地激活宿主
+# MailHub 参考宿主（reference host）
 
-归档内自包含的最小宿主，用于执行 Gmail 真实只读激活（runbook A0–A2）。
-它实现 `docs/host-adapter-sdk.md` 记载的 `/v1/mail-host/*` HTTP 合同，
-OAuth 凭据代理直接复用归档中的参考实现
+本目录是接入 MailHub 的**参考实现**：一个自包含宿主应用，完整实现
+`docs/host-adapter-sdk.md` 记载的 `/v1/mail-host/*` HTTP 合同。它既可以直接照抄，
+也可以当作"我的产品每个 Port 应该返回什么"的对照样板。
+
+它同时承担本仓的真实邮箱验证（Gmail 只读激活 runbook A0–A2、网易企业邮箱 IMAP 切片、
+受控发送闭环）。OAuth 凭据代理复用参考实现
 `apps/bff/src/caplatform_bff/mailhub_credentials.py`（不复制、不分叉）。
 
 **诚实边界（这不是生产宿主）**：
@@ -26,6 +29,23 @@ OAuth 凭据代理直接复用归档中的参考实现
 | `scripts/b4_a1.py` | A1 走查：授权 → 重放拒绝 → refresh → revoke → 第二次授权 |
 | `docker-compose.yml` | 本地 PostgreSQL 16.4（端口 5433） |
 | `.env.example` | 共享环境模板（宿主 + MailHub + Google OAuth） |
+
+## 自证：conformance kit
+
+参考宿主会驱动自己走完 Host Port 矩阵（真实 HTTP 契约、进程内 ASGI），并用 MailHub 的
+conformance kit 校验，产出可复核的 bundle：
+
+```powershell
+python scripts\emit_conformance_bundle.py --json host-conformance.json
+# host   : mailhub-reference-host
+# areas  : 11
+# checks : 40
+# result : pass
+```
+
+覆盖 11 个 Port 区域共 40 项检查（含 `AuditPort` 的递归脱敏断言）。测试见
+`tests/test_host_conformance.py`。这是本地开发证据，不是生产 Provider 证据：
+生产宿主的 identity/approval/Secret 后端必须替换为真实实现。
 
 ## 快速开始
 

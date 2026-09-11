@@ -246,6 +246,11 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                     "email_address": resolved["username"],
                     "provider_account_id": resolved["username"],
                     "credential_version": 1,
+                    # An application password is rotated by an operator instead
+                    # of expiring per call; the projection says so rather than
+                    # leaving the lifetime unstated.
+                    "long_lived": True,
+                    "rotation": "operator_managed",
                 }
             }
         try:
@@ -501,6 +506,15 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         stores.record_telemetry(name=name, fields=fields)
         return {}
 
+    @router.post("/v1/mail-host/audit", dependencies=[service_auth])
+    async def audit_append(request: Request) -> dict[str, object]:
+        body = _json_body(request)
+        event = body.get("event")
+        if not isinstance(event, dict):
+            raise HTTPException(status_code=422, detail={"code": "audit_event_invalid"})
+        stores.record_audit(event={str(key): value for key, value in event.items()})
+        return {}
+
     @router.post("/v1/mail-host/quota/acquire", dependencies=[service_auth])
     async def quota_acquire(request: Request) -> JSONResponse:
         body = _json_body(request)
@@ -536,6 +550,12 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                 "lease": {
                     "lease_id": str(lease.lease_id),
                     "acquired_at": lease.acquired_at.astimezone(UTC).isoformat(),
+                    # QuotaLease carries no expiry field; the durable expiry is
+                    # the same now + lease_ttl value written to the lease row.
+                    "expires_at": (lease.acquired_at + stores.lease_ttl)
+                    .astimezone(UTC)
+                    .isoformat(),
+                    "lease_seconds": int(stores.lease_ttl.total_seconds()),
                 }
             }
         )
@@ -561,7 +581,14 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         """
 
         del request
-        return {"allowed": True}
+        # The local host has no four-eyes switch ledger, but it still answers
+        # explicitly so a caller can tell "allowed" apart from "nobody replied".
+        return {
+            "allowed": True,
+            "decision": "allow",
+            "explicit": True,
+            "reason": "local_development_no_switch_ledger",
+        }
 
     @router.post("/v1/mail-host/ai/structure", dependencies=[service_auth])
     async def ai_structure(request: Request) -> JSONResponse:

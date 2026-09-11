@@ -1,5 +1,15 @@
 """Portable host adapters and contract-test implementations."""
 
+from mailhub.hosts.conformance import (
+    ConformanceCheck,
+    HostConformanceBundle,
+    HostConformanceReport,
+    bundle_from_mapping,
+    load_bundle,
+    run_host_conformance,
+    sample_bundle,
+    template_bundle,
+)
 from mailhub.hosts.http import (
     HttpAgentMemoryAdapter,
     HttpAiExecutionAdapter,
@@ -104,4 +114,12 @@ __all__ = [
     "ShadowComparison",
     "compare_shadow",
     "project_delivery_result",
+    "ConformanceCheck",
+    "HostConformanceBundle",
+    "HostConformanceReport",
+    "bundle_from_mapping",
+    "load_bundle",
+    "run_host_conformance",
+    "sample_bundle",
+    "template_bundle",
 ]

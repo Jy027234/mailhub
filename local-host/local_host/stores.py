@@ -137,7 +137,55 @@ CREATE TABLE IF NOT EXISTS host_oauth_flows (
     provider TEXT NOT NULL,
     expires_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS host_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    event_digest TEXT NOT NULL,
+    fields_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_host_audit_events ON host_audit_events(event_type, created_at);
 """
+
+#: Field-name markers that must never be persisted in the audit ledger.  The
+#: adapter redacts first; the host redacts again so a direct caller cannot
+#: smuggle content, a token or a credential reference into durable storage.
+_FORBIDDEN_AUDIT_MARKERS = (
+    "body",
+    "html",
+    "mime",
+    "snippet",
+    "raw",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "authorization",
+    "cookie",
+)
+
+
+def redact_audit_fields(event: dict[str, object]) -> dict[str, object]:
+    """Keep bounded identifiers, hashes, status and evidence refs only."""
+
+    result: dict[str, object] = {}
+    for key, value in event.items():
+        normalized = key.strip().casefold()
+        if any(marker in normalized for marker in _FORBIDDEN_AUDIT_MARKERS):
+            continue
+        if value is None or isinstance(value, (str, int, float, bool)):
+            result[key] = value
+        elif isinstance(value, (list, tuple)):
+            result[key] = [
+                item
+                for item in value
+                if item is None or isinstance(item, (str, int, float, bool))
+            ]
+        elif isinstance(value, dict):
+            result[key] = redact_audit_fields(
+                {str(inner): inner_value for inner, inner_value in value.items()}
+            )
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +304,55 @@ class LocalStores:
                 ),
             )
 
+    # ---- audit -------------------------------------------------------------
+
+    def record_audit(self, *, event: dict[str, object]) -> str:
+        """Persist a redacted audit record and return its retained-field digest."""
+
+        raw_type = event.get("event_type") or event.get("event") or "mailhub.event"
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            raise StoreError("audit_event_type_invalid", status_code=422)
+        redacted = redact_audit_fields(event)
+        encoded = json.dumps(redacted, sort_keys=True, separators=(",", ":"))
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO host_audit_events
+                   (event_type, event_digest, fields_json, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (raw_type.strip(), _digest(encoded), encoded, _now().isoformat()),
+            )
+        return _digest(encoded)
+
+    def audit_records(self, limit: int = 50) -> tuple[dict[str, object], ...]:
+        """Return retained audit payloads, newest first."""
+
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT fields_json FROM host_audit_events ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        records: list[dict[str, object]] = []
+        for row in rows:
+            payload = json.loads(str(row["fields_json"]))
+            if isinstance(payload, dict):
+                records.append({str(key): value for key, value in payload.items()})
+        return tuple(records)
+
+    def audit_field_names(self, limit: int = 50) -> tuple[str, ...]:
+        """Return retained field names, newest first (used by conformance)."""
+
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT fields_json FROM host_audit_events ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        names: list[str] = []
+        for row in rows:
+            payload = json.loads(str(row["fields_json"]))
+            if isinstance(payload, dict):
+                names.extend(str(key) for key in payload)
+        return tuple(dict.fromkeys(names))
+
     # ---- approvals ---------------------------------------------------------
 
     def create_approval(
@@ -313,6 +410,7 @@ class LocalStores:
             "action_id": action_id,
             "result_ref": f"act_{_token()}",
             "execution_id": f"exec_{_token()}",
+            "replayed": False,
         }
         with self._connect() as db:
             existing = db.execute(
@@ -321,7 +419,9 @@ class LocalStores:
             ).fetchone()
             if existing is not None:
                 loaded: Any = json.loads(str(existing["result_json"]))
-                return loaded if isinstance(loaded, dict) else result
+                replay = dict(loaded) if isinstance(loaded, dict) else dict(result)
+                replay["replayed"] = True
+                return replay
             db.execute(
                 """INSERT INTO host_actions
                    (idempotency_key, tenant_id, subject_id, action_id, result_json, created_at)
@@ -350,6 +450,7 @@ class LocalStores:
             "knowledge_ref": f"kref_{_token()}",
             "knowledge_candidate_ref": candidate_id,
             "approved_at": _now().isoformat(),
+            "created": True,
         }
         with self._connect() as db:
             existing = db.execute(
@@ -358,7 +459,9 @@ class LocalStores:
             ).fetchone()
             if existing is not None:
                 loaded = json.loads(str(existing["result_json"]))
-                return loaded if isinstance(loaded, dict) else result
+                replay = dict(loaded) if isinstance(loaded, dict) else dict(result)
+                replay["created"] = False
+                return replay
             db.execute(
                 """INSERT INTO host_knowledge
                    (idempotency_key, tenant_id, subject_id, candidate_id, result_json, created_at)
