@@ -76,7 +76,9 @@ CREATE TABLE IF NOT EXISTS host_approvals (
     subject_id TEXT NOT NULL,
     action_id TEXT NOT NULL,
     action_digest TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    consumed_at TEXT,
+    consumed_by TEXT
 );
 CREATE TABLE IF NOT EXISTS host_actions (
     idempotency_key TEXT PRIMARY KEY,
@@ -179,7 +181,9 @@ def redact_audit_fields(event: dict[str, object]) -> dict[str, object]:
             result[key] = value
         elif isinstance(value, (list, tuple)):
             result[key] = [
-                item for item in value if item is None or isinstance(item, (str, int, float, bool))
+                item
+                for item in value
+                if item is None or isinstance(item, (str, int, float, bool))
             ]
         elif isinstance(value, dict):
             result[key] = redact_audit_fields(
@@ -204,6 +208,7 @@ class LocalStores:
         database_path: Path,
         encryption_secret: str,
         vault: VaultKvClient | None = None,
+        require_four_eyes: bool = False,
     ) -> None:
         if len(encryption_secret) < 32:
             raise ValueError("host_encryption_secret_too_short")
@@ -213,12 +218,33 @@ class LocalStores:
         # With a Vault backend the row keeps a pointer, never the secret; the
         # encrypted column stays as the local/dev fallback.
         self._vault = vault
+        # Off by default: this reference host is single-principal, so demanding
+        # a second approver would make every local flow unusable.  A product
+        # that promises separation of duties turns it on and inherits the
+        # enforcement below.
+        self._require_four_eyes = require_four_eyes
         self.lease_ttl = timedelta(hours=1)
 
     def initialize(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.executescript(_SCHEMA)
+            self._migrate(db)
+
+    def _migrate(self, db: sqlite3.Connection) -> None:
+        """Add columns to databases created before those columns existed.
+
+        CREATE TABLE IF NOT EXISTS leaves an existing table untouched, so a host
+        upgraded in place needs them added explicitly.  The table and column
+        names are literals; nothing here comes from a caller.
+        """
+
+        existing = {
+            str(row["name"]) for row in db.execute("PRAGMA table_info(host_approvals)")
+        }
+        for column in ("consumed_at", "consumed_by"):
+            if column not in existing:
+                db.execute(f"ALTER TABLE host_approvals ADD COLUMN {column} TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
@@ -279,7 +305,9 @@ class LocalStores:
         except Exception as exc:  # noqa: BLE001 - bounded local fallback
             raise StoreError("object_store_decryption_failed", status_code=500) from exc
 
-    def delete_object(self, *, tenant_id: str, subject_id: str, object_ref: str) -> None:
+    def delete_object(
+        self, *, tenant_id: str, subject_id: str, object_ref: str
+    ) -> None:
         with self._connect() as db:
             db.execute(
                 "DELETE FROM host_objects WHERE object_ref=? AND tenant_id=? AND subject_id=?",
@@ -388,25 +416,69 @@ class LocalStores:
         action_id: str,
         action_digest: str,
         approver_subject_id: str | None = None,
+        revalidation: bool = False,
     ) -> bool:
-        # Accepted so the wire contract is additive, not yet enforced: this
-        # reference host is single-principal, so separation of duties has to be
-        # configured before the check can mean anything.
-        del approver_subject_id
+        """Exercise or re-validate a confirmation; never authorise twice.
+
+        Two modes, because the service verifies twice for one send: once when
+        the draft is queued (a fresh approval act) and once immediately before
+        the provider sees bytes (a re-validation of that same act).
+
+        * fresh (revalidation=False) -- the confirmation must be unused, must
+          match the presented action, and is bound and consumed atomically, so
+          one reference can never authorise a second action;
+        * re-validation (revalidation=True) -- succeeds only for a confirmation
+          that was already exercised for exactly this action.
+
+        A confirmation created without an action binding used to be accepted for
+        *any* action on existence alone.  It is now bound to the first action
+        that presents it and consumed in the same statement.
+        """
+
         with self._connect() as db:
             row = db.execute(
-                "SELECT action_id, action_digest FROM host_approvals WHERE confirmation_ref=?",
+                """SELECT subject_id, action_id, action_digest, consumed_at
+                   FROM host_approvals WHERE confirmation_ref=?""",
                 (confirmation_ref,),
             ).fetchone()
-        if row is None:
-            return False
-        stored_id = str(row["action_id"])
-        stored_digest = str(row["action_digest"])
-        # Unbound confirmations (local single-user mode) verify by existence;
-        # bound confirmations require both action id and digest to match.
-        if not stored_id and not stored_digest:
-            return True
-        return stored_id == action_id and hmac.compare_digest(stored_digest, action_digest)
+            if row is None:
+                return False
+            stored_id = str(row["action_id"])
+            stored_digest = str(row["action_digest"])
+            consumed = row["consumed_at"] is not None
+            if revalidation:
+                return (
+                    consumed
+                    and stored_id == action_id
+                    and hmac.compare_digest(stored_digest, action_digest)
+                )
+            if consumed:
+                return False
+            if stored_id and (
+                stored_id != action_id
+                or not hmac.compare_digest(stored_digest, action_digest)
+            ):
+                return False
+            if self._require_four_eyes and (
+                approver_subject_id is None
+                or approver_subject_id == str(row["subject_id"])
+            ):
+                # Fail closed: with no distinct approver on the record there is
+                # nothing to separate this from self-approval.
+                return False
+            cursor = db.execute(
+                """UPDATE host_approvals
+                   SET action_id=?, action_digest=?, consumed_at=?, consumed_by=?
+                   WHERE confirmation_ref=? AND consumed_at IS NULL""",
+                (
+                    action_id,
+                    action_digest,
+                    _now().isoformat(),
+                    approver_subject_id or "",
+                    confirmation_ref,
+                ),
+            )
+            return cursor.rowcount == 1
 
     # ---- actions / knowledge -----------------------------------------------
 
@@ -626,7 +698,9 @@ class LocalStores:
                             now.isoformat(),
                         ),
                     )
-                db.execute("DELETE FROM host_quota_leases WHERE lease_id=?", (lease_id,))
+                db.execute(
+                    "DELETE FROM host_quota_leases WHERE lease_id=?", (lease_id,)
+                )
                 db.commit()
             except Exception:
                 db.rollback()
@@ -694,7 +768,9 @@ class LocalStores:
         try:
             password = self._fernet.decrypt(stored).decode("utf-8")
         except Exception as exc:  # noqa: BLE001 - bounded local fallback
-            raise StoreError("imap_credential_decryption_failed", status_code=500) from exc
+            raise StoreError(
+                "imap_credential_decryption_failed", status_code=500
+            ) from exc
         return {"username": str(row["username"]), "password": password}
 
     def rotate_imap_credential(
@@ -724,9 +800,9 @@ class LocalStores:
             if is_vault_pointer(stored):
                 if self._vault is None:
                     raise StoreError("imap_vault_not_configured", status_code=503)
-                replacement = self._vault.put_secret(name=credential_ref, value=password).encode(
-                    "utf-8"
-                )
+                replacement = self._vault.put_secret(
+                    name=credential_ref, value=password
+                ).encode("utf-8")
             else:
                 replacement = self._fernet.encrypt(password.encode("utf-8"))
             version = int(row["version"]) + 1

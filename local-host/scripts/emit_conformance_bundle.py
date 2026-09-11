@@ -157,45 +157,79 @@ async def _collect(
     ]
 
     action = {"action_id": "action-conformance", "action_type": "create_task"}
-    requested = _payload(
-        await client.post(
-            "/v1/mail-host/approvals/request",
-            headers=AUTH,
-            json={"tenant_id": TENANT, "subject_id": SUBJECT, "action": action},
+    # A distinct principal, so the four-eyes observations below mean something.
+    approver = SUBJECT + "-approver"
+
+    async def request_confirmation() -> str:
+        requested = _payload(
+            await client.post(
+                "/v1/mail-host/approvals/request",
+                headers=AUTH,
+                json={"tenant_id": TENANT, "subject_id": SUBJECT, "action": action},
+            )
         )
-    )
-    confirmation_ref = str(requested.get("confirmation_ref", ""))
-    matched = _payload(
-        await client.post(
-            "/v1/mail-host/approvals/verify",
-            headers=AUTH,
-            json={"confirmation_ref": confirmation_ref, "action": action},
+        return str(requested.get("confirmation_ref", ""))
+
+    async def verify(
+        reference: str, presented: dict[str, object], approver_subject_id: str
+    ) -> bool:
+        answered = _payload(
+            await client.post(
+                "/v1/mail-host/approvals/verify",
+                headers=AUTH,
+                json={
+                    "confirmation_ref": reference,
+                    "action": presented,
+                    "approver_subject_id": approver_subject_id,
+                },
+            )
         )
+        return bool(answered.get("verified"))
+
+    confirmation_ref = await request_confirmation()
+    matched = await verify(confirmation_ref, action, approver)
+    replayed = await verify(confirmation_ref, action, approver)
+    foreign = await request_confirmation()
+    self_approved = await verify(foreign, action, SUBJECT)
+    unbound_ref = await request_confirmation()
+    mismatched = await verify(
+        unbound_ref, {**action, "action_type": "update_task"}, approver
     )
-    mismatched = _payload(
-        await client.post(
-            "/v1/mail-host/approvals/verify",
-            headers=AUTH,
-            json={
-                "confirmation_ref": confirmation_ref,
-                "action": {**action, "action_type": "update_task"},
-            },
-        )
-    )
+
     observations["approval"] = [
         {
             "confirmation_ref": confirmation_ref,
             "bound": True,
             "expired": False,
             "foreign_scope": False,
-            "accepted": bool(matched.get("verified")),
+            "four_eyes_required": True,
+            "accepted": matched,
         },
         {
             "confirmation_ref": confirmation_ref,
+            "bound": True,
+            "expired": False,
+            "foreign_scope": False,
+            "four_eyes_required": True,
+            "replayed": True,
+            "accepted": replayed,
+        },
+        {
+            "confirmation_ref": foreign,
+            "bound": True,
+            "expired": False,
+            "foreign_scope": False,
+            "four_eyes_required": True,
+            "self_approved": True,
+            "accepted": self_approved,
+        },
+        {
+            "confirmation_ref": unbound_ref,
             "bound": False,
             "expired": False,
             "foreign_scope": False,
-            "accepted": bool(mismatched.get("verified")),
+            "four_eyes_required": True,
+            "accepted": mismatched,
         },
     ]
 
@@ -385,7 +419,11 @@ async def _run(bundle_path: Path | None) -> int:
         prefix="mailhub-conformance-", ignore_cleanup_errors=True
     ) as workdir:
         settings = _settings(Path(workdir) / "host.db")
-        stores = LocalStores(settings.database_path, settings.encryption_secret)
+        # A demonstration host must not claim four-eyes without exercising it,
+        # so the reference bundle is produced with the policy switched on.
+        stores = LocalStores(
+            settings.database_path, settings.encryption_secret, require_four_eyes=True
+        )
         stores.initialize()
         broker = build_broker(settings, settings.database_path)
         await broker.initialize()

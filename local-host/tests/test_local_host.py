@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -337,12 +338,13 @@ async def test_approvals_bind_action_identity(client: httpx.AsyncClient) -> None
 
 
 @pytest.mark.asyncio
-async def test_unbound_confirmation_supports_local_send_flow(
+async def test_unbound_confirmation_binds_to_the_first_action_it_authorises(
     client: httpx.AsyncClient,
 ) -> None:
-    # The send caller cannot know the service-constructed action id in
-    # advance; the local host mirrors the reference in-memory port and
-    # allows an unbound confirmation to verify any action.
+    # The send caller cannot know the service-constructed action id in advance,
+    # so an unbound confirmation is still creatable.  It used to verify *any*
+    # action on existence alone; it is now bound to whichever action presents it
+    # first and consumed in the same statement.
     response = await client.post(
         "/v1/mail-host/approvals/request",
         headers=_auth(),
@@ -351,7 +353,7 @@ async def test_unbound_confirmation_supports_local_send_flow(
     assert response.status_code == 200
     confirmation_ref = response.json()["confirmation_ref"]
 
-    any_action = {
+    first_action = {
         "action_id": "send-action-unknown",
         "action_type": "send_reply",
         "context": {"tenant_id": "tenant-1", "agent_subject_id": "user-1"},
@@ -360,16 +362,251 @@ async def test_unbound_confirmation_supports_local_send_flow(
     response = await client.post(
         "/v1/mail-host/approvals/verify",
         headers=_auth(),
-        json={"confirmation_ref": confirmation_ref, "action": any_action},
+        json={"confirmation_ref": confirmation_ref, "action": first_action},
     )
     assert response.json()["verified"] is True
+
+    # A second, different action must not ride on the same confirmation.
+    other_action = {**first_action, "action_id": "send-action-other"}
+    response = await client.post(
+        "/v1/mail-host/approvals/verify",
+        headers=_auth(),
+        json={"confirmation_ref": confirmation_ref, "action": other_action},
+    )
+    assert response.json()["verified"] is False
 
     missing = await client.post(
         "/v1/mail-host/approvals/verify",
         headers=_auth(),
-        json={"confirmation_ref": "confirm_never-created", "action": any_action},
+        json={"confirmation_ref": "confirm_never-created", "action": first_action},
     )
     assert missing.json()["verified"] is False
+
+
+@pytest.mark.asyncio
+async def test_revalidation_is_distinct_from_a_fresh_approval_act(
+    client: httpx.AsyncClient,
+) -> None:
+    """The wire distinguishes an explicit null from an omitted field.
+
+    The service verifies twice per send: a fresh act while queueing, then a
+    re-validation before the provider sees bytes.  Collapsing the two would make
+    single-use approvals break every send, so the distinction is contractual.
+    """
+    response = await client.post(
+        "/v1/mail-host/approvals/request",
+        headers=_auth(),
+        json={"tenant_id": "tenant-1", "subject_id": "user-1"},
+    )
+    confirmation_ref = response.json()["confirmation_ref"]
+    action = {
+        "action_id": "send-action-1",
+        "action_type": "send_reply",
+        "context": {"tenant_id": "tenant-1", "agent_subject_id": "user-1"},
+        "input_digest": "e" * 64,
+    }
+
+    async def verify(payload: dict[str, object]) -> bool:
+        posted = await client.post(
+            "/v1/mail-host/approvals/verify", headers=_auth(), json=payload
+        )
+        return bool(posted.json()["verified"])
+
+    # Re-validation before any approval act has nothing to point at.
+    assert (
+        await verify(
+            {
+                "confirmation_ref": confirmation_ref,
+                "action": action,
+                "approver_subject_id": None,
+            }
+        )
+        is False
+    )
+
+    # A fresh act: the field is absent, so this predates the marker and is taken
+    # as presenting the approval.
+    assert (
+        await verify({"confirmation_ref": confirmation_ref, "action": action}) is True
+    )
+
+    # Now the same action may be re-validated any number of times...
+    assert (
+        await verify(
+            {
+                "confirmation_ref": confirmation_ref,
+                "action": action,
+                "approver_subject_id": None,
+            }
+        )
+        is True
+    )
+    assert (
+        await verify(
+            {
+                "confirmation_ref": confirmation_ref,
+                "action": action,
+                "approver_subject_id": None,
+            }
+        )
+        is True
+    )
+
+    # ...but never for a different action.
+    assert (
+        await verify(
+            {
+                "confirmation_ref": confirmation_ref,
+                "action": {**action, "action_id": "send-action-2"},
+                "approver_subject_id": None,
+            }
+        )
+        is False
+    )
+
+    # And a non-string approver is rejected outright rather than coerced.
+    bad = await client.post(
+        "/v1/mail-host/approvals/verify",
+        headers=_auth(),
+        json={
+            "confirmation_ref": confirmation_ref,
+            "action": action,
+            "approver_subject_id": 7,
+        },
+    )
+    assert bad.status_code == 422
+
+
+def test_confirmation_is_single_use(stores: LocalStores) -> None:
+    ref = stores.create_approval(
+        tenant_id="tenant-1", subject_id="user-1", action_id="a1", action_digest="d1"
+    )
+    assert (
+        stores.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-1",
+        )
+        is True
+    )
+    assert (
+        stores.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-1",
+        )
+        is False
+    )
+
+
+def test_bound_confirmation_rejects_a_different_action(stores: LocalStores) -> None:
+    ref = stores.create_approval(
+        tenant_id="tenant-1", subject_id="user-1", action_id="a1", action_digest="d1"
+    )
+    assert (
+        stores.verify_approval(
+            confirmation_ref=ref,
+            action_id="a2",
+            action_digest="d1",
+            approver_subject_id="user-1",
+        )
+        is False
+    )
+    assert (
+        stores.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d2",
+            approver_subject_id="user-1",
+        )
+        is False
+    )
+
+
+def test_four_eyes_refuses_self_approval_and_anonymous_approval(tmp_path: Path) -> None:
+    strict = LocalStores(tmp_path / "strict.db", _SECRET, require_four_eyes=True)
+    strict.initialize()
+    ref = strict.create_approval(
+        tenant_id="tenant-1", subject_id="user-1", action_id="a1", action_digest="d1"
+    )
+    # The requester cannot approve their own request...
+    assert (
+        strict.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-1",
+        )
+        is False
+    )
+    # ...and an unnamed approver proves nothing, so it fails closed too.  Neither
+    # refusal may consume the confirmation.
+    assert (
+        strict.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id=None,
+        )
+        is False
+    )
+    # A second principal may still exercise it.
+    assert (
+        strict.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-2",
+        )
+        is True
+    )
+
+
+def test_initialize_adds_consumption_columns_to_an_existing_database(
+    tmp_path: Path,
+) -> None:
+    """An in-place upgrade must not need a fresh database.
+
+    CREATE TABLE IF NOT EXISTS leaves the old table alone, so without the
+    migration an upgraded host would keep the fail-open behaviour silently.
+    """
+
+    database = tmp_path / "legacy.db"
+    legacy = sqlite3.connect(database)
+    legacy.execute(
+        "CREATE TABLE host_approvals (confirmation_ref TEXT PRIMARY KEY,"
+        " tenant_id TEXT NOT NULL, subject_id TEXT NOT NULL, action_id TEXT NOT NULL,"
+        " action_digest TEXT NOT NULL, created_at TEXT NOT NULL)"
+    )
+    legacy.execute(
+        "INSERT INTO host_approvals VALUES"
+        " ('confirm_old','tenant-1','user-1','a1','d1','2026-01-01T00:00:00+00:00')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    upgraded = LocalStores(database, _SECRET)
+    upgraded.initialize()
+    assert (
+        upgraded.verify_approval(
+            confirmation_ref="confirm_old",
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-1",
+        )
+        is True
+    )
+    assert (
+        upgraded.verify_approval(
+            confirmation_ref="confirm_old",
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-1",
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio

@@ -1528,7 +1528,14 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    （宿主声明 `four_eyes_required` 时必检）与两项证据检查，并引入 **`not_implemented` 第三态**，
    未声明四眼者被判"未实现"而非通过。测试：一致性套件 20 项（+5，含"声明后自批必须失败"
    与"未声明必须判未实现"两条活性用例）。仍在开放：审批人身份未持久化到 outbox operation（需加列 + 迁移），
-   故发信前再校验无法重新断言四眼；`local-host` 的四眼强制、一次性消费与 fail-open 修复待做。
+   故发信前再校验无法重新断言四眼。
+   **2026-09-11 参考宿主侧已闭环**：`host_approvals` 增 `consumed_at`/`consumed_by` 并加就地升级迁移；
+   `verify_approval` 改为首次校验即绑定并消费（原子 UPDATE + rowcount 比较），移除 fail-open 旁路——
+   未绑定确认现在只授权它遇到的第一封 action；新增 revalidation 模式区分「新批准」与「发信前再校验」
+   （线上始终携带 `approver_subject_id`，字符串=新批准、显式 null=再校验）；四眼由 `HOST_REQUIRE_FOUR_EYES` 配置，
+   开启时自批与匿名批准一律拒绝且不消费。测试 +5（5/6 对旧实现失败，已用 stash 实证）。
+   参考宿主 conformance bundle 改以严格策略产生：44 项检查全通过、`not_implemented` 为空。
+   仍在开放：审批人身份未持久化到 outbox operation（需加列 + 迁移）；`OUTCOME_UNKNOWN` 真实对账。
 
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；

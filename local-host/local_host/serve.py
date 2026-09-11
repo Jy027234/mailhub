@@ -34,7 +34,10 @@ def build_vault(settings: HostSettings) -> VaultKvClient | None:
 
 settings = HostSettings.from_env()
 stores = LocalStores(
-    settings.database_path, settings.encryption_secret, vault=build_vault(settings)
+    settings.database_path,
+    settings.encryption_secret,
+    vault=build_vault(settings),
+    require_four_eyes=settings.require_four_eyes,
 )
 broker = build_broker(settings, settings.database_path)
 app = create_host_app(settings, stores, broker)

@@ -1360,11 +1360,10 @@ class HttpApprovalAdapter(_HttpPortBase, ApprovalPort):
             "confirmation_ref": confirmation_ref,
             "action": _action_json(action),
         }
-        if approver_subject_id is not None:
-            # Sent only when the caller actually holds an approver identity, so
-            # the wire request stays byte-identical for hosts that have not
-            # adopted separation of duties.
-            body["approver_subject_id"] = approver_subject_id
+        # Always present, including an explicit null: the host has to be able to
+        # tell a fresh approval act from a re-validation of one already
+        # exercised, and an omitted field cannot express that distinction.
+        body["approver_subject_id"] = approver_subject_id
         _, payload = await self._json_request("POST", self.verify_path, body)
         verified = payload.get("verified")
         if not isinstance(verified, bool):

@@ -31,6 +31,11 @@ class HostSettings:
     vault_token: str = ""
     vault_mount: str = "secret"
     vault_prefix: str = "mailhub"
+    # Separation of duties.  Off by default because this reference host has one
+    # principal, so demanding a second approver would make every local flow
+    # unusable; a product that promises four-eyes turns it on and inherits the
+    # enforcement in LocalStores.verify_approval.
+    require_four_eyes: bool = False
 
     @property
     def ai_gateway_enabled(self) -> bool:
@@ -65,6 +70,7 @@ class HostSettings:
             vault_token=os.getenv("HOST_VAULT_TOKEN", ""),
             vault_mount=os.getenv("HOST_VAULT_MOUNT", "secret"),
             vault_prefix=os.getenv("HOST_VAULT_PREFIX", "mailhub"),
+            require_four_eyes=_env_bool("HOST_REQUIRE_FOUR_EYES", default=False),
         )
         settings.validate()
         return settings
