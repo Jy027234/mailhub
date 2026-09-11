@@ -1507,6 +1507,12 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    **实测发现的缺口已补**：新增 `max_send_bytes`（连接器默认 10 MiB、可经 `MAILHUB_SMTP_MAX_SEND_BYTES` 调整），
    在**建立 SMTP 连接之前**校验，超限抛不可重试的 `smtp_message_too_large`（重试永远失败的条件不该被重试）；
    夹具用例由"测量"改为"强制"并线上验证**超限时未发出任何字节**。
+   **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
+   `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；
+   宿主库只存指针，口令在 Vault。真实 Vault dev 下 **15/15** 检查通过：库内无明文且扫描 WAL 伴随文件、
+   resolve 跨租户拒绝、**轮换同指针升版本**、**revoke 从 Vault 删除材料**、撤权后 fail-closed。
+   证据 `docs/reports/mailhub-vault-secret-backend-2026-08-19.json`。
+
    **2026-08-19 真实 163 端到端往返（MAIL-SMTP-001/002 的 Provider 侧证据）**：
    `packages/mailhub/scripts/smtp_provider_roundtrip.py` 用真实 `ImapSmtpConnector` 向**自己的邮箱**发一封
    带 `[mailhub-roundtrip <marker>]` 前缀的邮件，再经 incremental sync 读回核对，**9/9 通过**：

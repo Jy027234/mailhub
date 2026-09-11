@@ -72,7 +72,7 @@
 | ID | 现状 | 缺口 | 验收条件 |
 | --- | --- | --- | --- |
 | `MAIL-ADOPT-007` | ✅ **已完成（2026-08-19，本地渲染验证）**：新增 `values.schema.json`（`additionalProperties: false` + 摘要正则 + sandbox `const:false`）、`_helpers.tpl`（标签/镜像/校验/env 复用）、`service.yaml`/`serviceaccount.yaml`/`ingress.yaml`/`hpa.yaml`/`pdb.yaml`/`networkpolicy.yaml`/`NOTES.txt`；容器加固（非 root、只读根、无 capability、seccomp、关 token 挂载）、探针、资源限额、`maxUnavailable: 0`；国内 IMAP/SMTP 开关为一等公民；`scripts/check_helm_chart.py` 40 项断言（含 5 个负向用例）已入 `--gates full`，helm 缺失即失败 | 剩余：真实集群部署与 `helm template` 之外的集群级验证 | 集群部署通过（本地渲染已验证：`helm chart gate: ok`） |
-| `MAIL-ADOPT-008` | 参考凭据 broker 只有加密 SQLite（本地/Beta） | 生产 Secret 后端（Vault/OpenBao/KMS）适配与轮换 | 真实 Secret 后端下的 resolve/refresh/revoke 证据 |
+| `MAIL-ADOPT-008` | ⚠️ **Vault KV v2 后端已建成并实测（2026-08-19）**：新增 `local-host/local_host/vault.py`（KV v2 读写删 + 有界脱敏错误 + 可注入 transport）与 `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX` 配置；宿主库里**只存指针** `vault:secret/<prefix>/<ref>`，口令本体在 Vault。**真实 Vault dev 下 15/15 检查通过**：库里无明文/无摘要（含 WAL 伴随文件扫描）、Vault 可读、resolve 返回口令且跨租户拒绝、**轮换原地更新同指针并升版本**、**revoke 真的从 Vault 删除材料**、撤权后 resolve fail-closed。证据 `docs/reports/mailhub-vault-secret-backend-2026-08-19.json`（离线 `--validate`）+ 12 项单测 | 剩余：KMS/OpenBao 变体、真实集群 Vault 的 HA/审计后端、轮换调度 | 真实 Secret 后端下的 resolve/rotate/revoke 证据（已达成） |
 | `MAIL-ADOPT-009` | 无容量/灾备证据 | PITR/RPO/RTO、容量与故障注入演练 | 演练报告 + 量化目标 |
 
 ### 3.5 真实 Provider 证据（"敢用"，与宿主无关）

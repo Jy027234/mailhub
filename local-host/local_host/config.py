@@ -24,12 +24,23 @@ class HostSettings:
     ai_gateway_url: str | None
     ai_gateway_model: str
     ai_gateway_api_key: str
+    # Production secret backend.  When configured, the host persists only a
+    # Vault pointer and the application password itself lives in Vault, so a
+    # database dump, backup or replica never carries a usable credential.
+    vault_addr: str = ""
+    vault_token: str = ""
+    vault_mount: str = "secret"
+    vault_prefix: str = "mailhub"
 
     @property
     def ai_gateway_enabled(self) -> bool:
         return bool(
             self.ai_gateway_url and self.ai_gateway_model and self.ai_gateway_api_key
         )
+
+    @property
+    def vault_enabled(self) -> bool:
+        return bool(self.vault_addr and self.vault_token)
 
     @classmethod
     def from_env(cls) -> HostSettings:
@@ -50,6 +61,10 @@ class HostSettings:
             ai_gateway_url=os.getenv("HOST_AI_GATEWAY_URL") or None,
             ai_gateway_model=os.getenv("HOST_AI_GATEWAY_MODEL", ""),
             ai_gateway_api_key=os.getenv("HOST_AI_GATEWAY_API_KEY", ""),
+            vault_addr=os.getenv("HOST_VAULT_ADDR", "").rstrip("/"),
+            vault_token=os.getenv("HOST_VAULT_TOKEN", ""),
+            vault_mount=os.getenv("HOST_VAULT_MOUNT", "secret"),
+            vault_prefix=os.getenv("HOST_VAULT_PREFIX", "mailhub"),
         )
         settings.validate()
         return settings
@@ -92,6 +107,20 @@ class HostSettings:
                 raise ValueError("HOST_AI_GATEWAY_MODEL invalid")
             if not self.ai_gateway_api_key:
                 raise ValueError("HOST_AI_GATEWAY_API_KEY required with gateway URL")
+        if self.vault_addr:
+            parsed_vault = urlsplit(self.vault_addr)
+            vault_local_http = (
+                parsed_vault.scheme == "http"
+                and (parsed_vault.hostname or "").casefold() in _LOCAL_HOSTS
+            )
+            if not parsed_vault.hostname or (
+                parsed_vault.scheme != "https" and not vault_local_http
+            ):
+                raise ValueError("HOST_VAULT_ADDR must be an https or loopback URL")
+            if parsed_vault.query or parsed_vault.fragment:
+                raise ValueError("HOST_VAULT_ADDR must not carry query or fragment")
+            if not self.vault_token:
+                raise ValueError("HOST_VAULT_TOKEN required with HOST_VAULT_ADDR")
 
 
 def _env_bool(name: str, *, default: bool) -> bool:

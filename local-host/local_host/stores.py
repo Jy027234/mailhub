@@ -25,6 +25,8 @@ from cryptography.fernet import Fernet
 
 from mailhub.quota import QuotaLease
 
+from local_host.vault import VaultKvClient, is_vault_pointer
+
 
 class StoreError(RuntimeError):
     def __init__(self, code: str, *, status_code: int = 400) -> None:
@@ -199,12 +201,20 @@ class StoredObject:
 
 
 class LocalStores:
-    def __init__(self, database_path: Path, encryption_secret: str) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        encryption_secret: str,
+        vault: VaultKvClient | None = None,
+    ) -> None:
         if len(encryption_secret) < 32:
             raise ValueError("host_encryption_secret_too_short")
         self.database_path = database_path
         digest = hashlib.sha256(encryption_secret.encode("utf-8")).digest()
         self._fernet = Fernet(base64.urlsafe_b64encode(digest))
+        # With a Vault backend the row keeps a pointer, never the secret; the
+        # encrypted column stays as the local/dev fallback.
+        self._vault = vault
         self.lease_ttl = timedelta(hours=1)
 
     def initialize(self) -> None:
@@ -637,7 +647,11 @@ class LocalStores:
         if len(password) > 512:
             raise StoreError("imap_password_invalid", status_code=422)
         credential_ref = f"imapcred_{_token()}"
-        encrypted = self._fernet.encrypt(password.encode("utf-8"))
+        if self._vault is not None:
+            pointer = self._vault.put_secret(name=credential_ref, value=password)
+            stored = pointer.encode("utf-8")
+        else:
+            stored = self._fernet.encrypt(password.encode("utf-8"))
         with self._connect() as db:
             db.execute(
                 """INSERT INTO host_imap_credentials
@@ -649,7 +663,7 @@ class LocalStores:
                     tenant_id,
                     subject_id,
                     username,
-                    encrypted,
+                    stored,
                     _now().isoformat(),
                 ),
             )
@@ -666,27 +680,87 @@ class LocalStores:
             ).fetchone()
         if row is None or str(row["status"]) != "ACTIVE":
             return None
+        stored = bytes(row["encrypted_password"])
+        # The pointer prefix is the only discriminator: a row is either a Vault
+        # pointer or an encrypted local blob, never a heuristic on blob shape.
+        if is_vault_pointer(stored):
+            if self._vault is None:
+                raise StoreError("imap_vault_not_configured", status_code=503)
+            password = self._vault.get_secret(pointer=stored.decode("utf-8", "replace"))
+            if password is None:
+                raise StoreError("imap_credential_missing_in_vault", status_code=404)
+            return {"username": str(row["username"]), "password": password}
         try:
-            password = self._fernet.decrypt(bytes(row["encrypted_password"])).decode(
-                "utf-8"
-            )
+            password = self._fernet.decrypt(stored).decode("utf-8")
         except Exception as exc:  # noqa: BLE001 - bounded local fallback
             raise StoreError(
                 "imap_credential_decryption_failed", status_code=500
             ) from exc
         return {"username": str(row["username"]), "password": password}
 
+    def rotate_imap_credential(
+        self, *, credential_ref: str, tenant_id: str, subject_id: str, password: str
+    ) -> int | None:
+        """Replace the secret material in place and bump the version.
+
+        Rotation is what makes a secret backend operationally usable: the
+        credential reference stays stable for MailHub while the material behind
+        it changes.  Returns the new version, or None when the credential is not
+        an active one owned by the caller.
+        """
+
+        if not password or any(ord(char) < 33 or ord(char) == 127 for char in password):
+            raise StoreError("imap_password_invalid", status_code=422)
+        if len(password) > 512:
+            raise StoreError("imap_password_invalid", status_code=422)
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT encrypted_password, version FROM host_imap_credentials
+                   WHERE credential_ref=? AND tenant_id=? AND subject_id=? AND status='ACTIVE'""",
+                (credential_ref, tenant_id, subject_id),
+            ).fetchone()
+            if row is None:
+                return None
+            stored = bytes(row["encrypted_password"])
+            if is_vault_pointer(stored):
+                if self._vault is None:
+                    raise StoreError("imap_vault_not_configured", status_code=503)
+                replacement = self._vault.put_secret(
+                    name=credential_ref, value=password
+                ).encode("utf-8")
+            else:
+                replacement = self._fernet.encrypt(password.encode("utf-8"))
+            version = int(row["version"]) + 1
+            db.execute(
+                """UPDATE host_imap_credentials
+                   SET encrypted_password=?, version=?, revoked_at=NULL
+                   WHERE credential_ref=? AND tenant_id=? AND subject_id=? AND status='ACTIVE'""",
+                (replacement, version, credential_ref, tenant_id, subject_id),
+            )
+        return version
+
     def revoke_imap_credential(
         self, *, credential_ref: str, tenant_id: str, subject_id: str
     ) -> bool:
         with self._connect() as db:
+            row = db.execute(
+                """SELECT encrypted_password FROM host_imap_credentials
+                   WHERE credential_ref=? AND tenant_id=? AND subject_id=? AND status='ACTIVE'""",
+                (credential_ref, tenant_id, subject_id),
+            ).fetchone()
+            if row is None:
+                return False
+            stored = bytes(row["encrypted_password"])
             updated = db.execute(
                 """UPDATE host_imap_credentials
                    SET status='REVOKED', version=version+1, revoked_at=?
                    WHERE credential_ref=? AND tenant_id=? AND subject_id=? AND status='ACTIVE'""",
                 (_now().isoformat(), credential_ref, tenant_id, subject_id),
             ).rowcount
-            return updated == 1
+        if updated == 1 and is_vault_pointer(stored) and self._vault is not None:
+            # Revocation must remove the material, not just the local pointer.
+            self._vault.delete_secret(pointer=stored.decode("utf-8", "replace"))
+        return updated == 1
 
     def is_imap_credential_ref(self, credential_ref: str) -> bool:
         return credential_ref.startswith("imapcred_")

@@ -30,6 +30,22 @@
 | `docker-compose.yml` | 本地 PostgreSQL 16.4（端口 5433） |
 | `.env.example` | 共享环境模板（宿主 + MailHub + Google OAuth） |
 
+## 生产 Secret 后端（Vault）
+
+设置 `HOST_VAULT_ADDR` 与 `HOST_VAULT_TOKEN` 后，宿主**只在本地库保存指针**
+（`vault:secret/<prefix>/<ref>`），应用授权码本体存放在 Vault KV v2；未配置时保持原有的加密
+SQLite 本地/开发后端。轮换 = 同指针原地更新并升版本；撤销 = 从 Vault **删除材料**（不只是改本地状态）。
+
+```powershell
+docker run -d --name mh-vault -p 127.0.0.1:8200:8200 `
+  -e VAULT_DEV_ROOT_TOKEN_ID=mh-dev-root-token hashicorp/vault:latest
+$env:HOST_VAULT_ADDR = "http://127.0.0.1:8200"; $env:HOST_VAULT_TOKEN = "mh-dev-root-token"
+python scripts\vault_backend_conformance.py --json vault.json
+```
+
+15 项检查覆盖：库内无明文/无摘要（**含 WAL 伴随文件扫描**）、Vault 可读、resolve 与跨租户拒绝、
+轮换同指针升版本、revoke 删除材料、撤权后 fail-closed。
+
 ## 自证：conformance kit
 
 参考宿主会驱动自己走完 Host Port 矩阵（真实 HTTP 契约、进程内 ASGI），并用 MailHub 的
