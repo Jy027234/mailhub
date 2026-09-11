@@ -1,12 +1,14 @@
 {
-  "name": "@caplatform/mailhub-ui",
+  "name": "@fyjtech/mailhub-ui",
   "version": "0.1.0",
   "private": false,
   "description": "Provider-neutral, metadata-first MailHub React workspace.",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.test.json",
+    "check:locales": "node scripts/check-locales.mjs",
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json && node scripts/check-locales.mjs"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -23,8 +25,15 @@
     "./styles.css": "./src/styles.css"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
     "@types/react": ">=18",
-    "typescript": ">=5.7"
+    "@types/react-dom": "^19.3.0",
+    "axe-core": "^4.13.0",
+    "jsdom": "^29.1.1",
+    "react-dom": "^19.3.0",
+    "typescript": ">=5.7",
+    "vitest": "^5.0.0"
   },
   "peerDependencies": {
     "react": ">=18"

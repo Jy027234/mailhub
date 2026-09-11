@@ -24,7 +24,7 @@ attachment DTO conformance are proven.
 `mailhub.oauth` contains the provider-neutral state/nonce/PKCE binding.  Hosts
 still own OAuth client registration, consent, token exchange and the durable
 state store; the in-memory state store is test-only.
-`MAILHUB_HOST_SERVICE_TOKEN` authenticates MailHub calls to the CAPlatform Host
+`MAILHUB_HOST_SERVICE_TOKEN` authenticates MailHub calls to the host
 credential boundary and is never persisted by MailHub. Provider client secrets
 remain BFF/Secret-Manager-only and must not be injected into this service.
 `POST /v1/mail/connections/{id}:scopes` is revision-fenced and only narrows the
@@ -117,7 +117,7 @@ intelligence contract set and its dataset card live in `evals/` and
 `docs/synthetic-mail-eval-dataset-card.md`; they contain no production mail.
 
 The reusable React surface is in `ui/`: use `MailHubWorkspace` when the host
-owns the page frame, or `@caplatform/mailhub-ui/standalone` and
+owns the page frame, or `@fyjtech/mailhub-ui/standalone` and
 `MailHubStandalone` when a stable shell is useful. Both require an injected
 host client and identity; neither mounts a router or stores credentials. SDK
 usage examples are in `examples/sdk/`. The package-level `LICENSE` and

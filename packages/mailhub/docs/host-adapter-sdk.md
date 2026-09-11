@@ -5,6 +5,11 @@ host implementation may use the included HTTP adapters or implement the Python
 Protocols directly. The host owns authentication to its services; MailHub only
 receives a scoped request and short-lived result.
 
+The matrix below is executable: record what your ports returned and run
+`python scripts/host_conformance.py --bundle <file>`
+(`python scripts/host_conformance.py --emit-template` starts a bundle). See
+`docs/host-quickstart.md` for the full onboarding path.
+
 ## Port matrix
 
 | Port | Required behavior | Never do |

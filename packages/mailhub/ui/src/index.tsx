@@ -1,4 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+
+import {
+  type MailHubInboxFilterKey,
+  type MailHubMessageOverrides,
+  type MailHubMessages,
+  interpolate,
+  resolveMessages,
+} from "./i18n.js";
+
+// A host that ships its own locale bundle needs the contract, not a fork of it.
+export {
+  enUS,
+  interpolate as interpolateMessage,
+  messageKeys,
+  REQUIRED_PLACEHOLDERS,
+  resolveMessages,
+  validateMessages,
+  zhCN,
+} from "./i18n.js";
+export type {
+  MailHubInboxFilterKey,
+  MailHubMessageOverrides,
+  MailHubMessages,
+} from "./i18n.js";
 
 export interface MailHubUiConnection {
   connection_id: string;
@@ -37,13 +61,7 @@ export interface MailHubUiThreadPage {
   has_more: boolean;
 }
 
-export type MailHubInboxFilter =
-  | "all"
-  | "unread"
-  | "important"
-  | "attachments"
-  | "projects"
-  | "candidates";
+export type MailHubInboxFilter = MailHubInboxFilterKey;
 
 export interface MailHubUiMessage {
   message_id: string;
@@ -108,23 +126,49 @@ export interface MailHubWorkspaceProps {
   className?: string;
   initialTab?: "inbox" | "candidates" | "connections";
   initialInboxFilter?: MailHubInboxFilter;
+  /**
+   * Level of the workspace's own heading.  A host that already renders a page
+   * `<h1>` (or mounts `MailHubStandalone`) passes 2 so the document keeps a
+   * single top-level heading and an unbroken heading order.
+   */
+  headingLevel?: 1 | 2 | 3;
+  /** Built-in locale tag: `zh-CN` (default) or `en-US`. */
+  locale?: string;
+  /** Partial or complete bundle overriding the resolved locale. */
+  messages?: MailHubMessageOverrides;
   onError?: (error: unknown) => void;
 }
 
 type Tab = NonNullable<MailHubWorkspaceProps["initialTab"]>;
+type HeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+
+const TAB_ORDER: readonly Tab[] = ["inbox", "candidates", "connections"];
+const PANEL_ID = "mailhub-view-panel";
+
+function headingTag(level: number): HeadingTag {
+  const clamped = Math.min(6, Math.max(1, Math.round(level)));
+  return `h${clamped}` as HeadingTag;
+}
 
 /**
  * Host-neutral MailHub workspace.  It deliberately uses only client-injected
- * contracts so it can be embedded in any router, session and design system.
+ * contracts so it can be embedded in any router, session and design system.  It
+ * renders text from an injectable locale bundle, exposes a real ARIA tab widget
+ * with roving tabindex and arrow-key navigation, and lets the host pick the
+ * heading level so embedding never breaks the document outline.
  */
 export function MailHubWorkspace({
   client,
-  identityLabel = "当前身份",
+  identityLabel,
   className = "",
   initialTab = "inbox",
   initialInboxFilter = "all",
+  headingLevel = 1,
+  locale,
+  messages,
   onError,
 }: MailHubWorkspaceProps) {
+  const text = useMemo(() => resolveMessages(locale, messages), [locale, messages]);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [connections, setConnections] = useState<MailHubUiConnection[]>([]);
   const [threads, setThreads] = useState<MailHubUiThread[]>([]);
@@ -136,10 +180,30 @@ export function MailHubWorkspace({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+
+  const Heading = headingTag(headingLevel);
+  const cardHeading = headingTag(headingLevel + 1);
+  const tabId = (value: Tab) => `mailhub-tab-${value}`;
 
   const reportError = (reason: unknown) => {
     setError(reason);
     onError?.(reason);
+  };
+  const selectTab = (value: Tab, moveFocus = false) => {
+    setTab(value);
+    if (moveFocus) tabRefs.current[value]?.focus();
+  };
+  const handleTabKeys = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let next: Tab | null = null;
+    if (event.key === "ArrowRight") next = TAB_ORDER[(index + 1) % TAB_ORDER.length];
+    else if (event.key === "ArrowLeft") next = TAB_ORDER[(index - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+    else if (event.key === "Home") next = TAB_ORDER[0];
+    else if (event.key === "End") next = TAB_ORDER[TAB_ORDER.length - 1];
+    if (next !== null) {
+      event.preventDefault();
+      selectTab(next, true);
+    }
   };
   const refresh = async (requestedFilter: MailHubInboxFilter = inboxFilter) => {
     setLoading(true);
@@ -186,7 +250,10 @@ export function MailHubWorkspace({
   };
   useEffect(() => { void refresh(); }, [client]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const title = useMemo(() => tab === "inbox" ? "统一收件箱" : tab === "candidates" ? "智能处理" : "连接中心", [tab]);
+  const title = useMemo(
+    () => (tab === "inbox" ? text.titleInbox : tab === "candidates" ? text.titleCandidates : text.titleConnections),
+    [tab, text],
+  );
   const openThread = async (thread: MailHubUiThread) => {
     try {
       setLoading(true);
@@ -210,24 +277,42 @@ export function MailHubWorkspace({
   };
 
   return (
-    <section className={`mailhub-workspace ${className}`.trim()} aria-label="MailHub 工作台" aria-busy={loading}>
+    <section className={`mailhub-workspace ${className}`.trim()} aria-label={text.workspaceLabel} aria-busy={loading}>
       <header className="mailhub-workspace__header">
-        <div><span className="mailhub-workspace__eyebrow">MAILHUB · {identityLabel}</span><h1>{title}</h1><p>metadata-first；正文与副作用按需、按授权执行。</p></div>
-        <button type="button" onClick={() => void refresh()} disabled={loading}>刷新</button>
+        <div><span className="mailhub-workspace__eyebrow">{text.eyebrow} · {identityLabel ?? text.identityFallback}</span><Heading>{title}</Heading><p>{text.subtitle}</p></div>
+        <button type="button" onClick={() => void refresh()} disabled={loading}>{text.refresh}</button>
       </header>
-      {error ? <div className="mailhub-workspace__alert" role="alert">MailHub 请求未完成；宿主未将失败当作成功。</div> : null}
-      <nav className="mailhub-workspace__tabs" role="tablist" aria-label="邮件视图">
-        {(["inbox", "candidates", "connections"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>{value === "inbox" ? "收件箱" : value === "candidates" ? `候选 · ${candidates.length}` : `连接 · ${connections.length}`}</button>)}
-      </nav>
-      {tab === "inbox" ? <Inbox client={client} threads={filterThreads(threads, inboxFilter)} detail={detail} content={content} query={query} setQuery={setQuery} filter={inboxFilter} onFilterChange={(value) => { setInboxFilter(value); void refresh(value); }} onSearch={() => void refresh()} onLoadMore={() => void loadMore()} hasMore={threadPage?.has_more === true} loadingMore={loading} onThread={openThread} onContent={openContent} /> : null}
-      {tab === "candidates" ? <Candidates client={client} candidates={candidates} onRefresh={() => void refresh()} /> : null}
-      {tab === "connections" ? <Connections client={client} connections={connections} onRefresh={() => void refresh()} /> : null}
+      {error ? <div className="mailhub-workspace__alert" role="alert">{text.requestFailed}</div> : null}
+      <div className="mailhub-workspace__tabs" role="tablist" aria-label={text.viewsLabel}>
+        {TAB_ORDER.map((value, index) => (
+          <button
+            key={value}
+            ref={(node) => { tabRefs.current[value] = node; }}
+            id={tabId(value)}
+            type="button"
+            role="tab"
+            aria-selected={tab === value}
+            aria-controls={PANEL_ID}
+            tabIndex={tab === value ? 0 : -1}
+            onClick={() => selectTab(value)}
+            onKeyDown={(event) => handleTabKeys(event, index)}
+          >
+            {value === "inbox" ? text.tabInbox : value === "candidates" ? interpolate(text.tabCandidates, { count: candidates.length }) : interpolate(text.tabConnections, { count: connections.length })}
+          </button>
+        ))}
+      </div>
+      <div id={PANEL_ID} role="tabpanel" aria-labelledby={tabId(tab)} tabIndex={-1}>
+        {tab === "inbox" ? <Inbox text={text} cardHeading={cardHeading} client={client} threads={filterThreads(threads, inboxFilter)} detail={detail} content={content} query={query} setQuery={setQuery} filter={inboxFilter} onFilterChange={(value) => { setInboxFilter(value); void refresh(value); }} onSearch={() => void refresh()} onLoadMore={() => void loadMore()} hasMore={threadPage?.has_more === true} loadingMore={loading} onThread={openThread} onContent={openContent} /> : null}
+        {tab === "candidates" ? <Candidates text={text} cardHeading={cardHeading} client={client} candidates={candidates} onRefresh={() => void refresh()} /> : null}
+        {tab === "connections" ? <Connections text={text} cardHeading={cardHeading} client={client} connections={connections} onRefresh={() => void refresh()} /> : null}
+      </div>
     </section>
   );
 }
 
-function Inbox(props: { client: MailHubUiClient; threads: MailHubUiThread[]; detail: MailHubUiThreadDetail | null; content: string; query: string; setQuery: (value: string) => void; filter: MailHubInboxFilter; onFilterChange: (value: MailHubInboxFilter) => void; onSearch: () => void; onLoadMore: () => void; hasMore: boolean; loadingMore: boolean; onThread: (thread: MailHubUiThread) => void; onContent: (messageId: string) => void }) {
-  return <div className="mailhub-workspace__inbox"><aside><form onSubmit={(event) => { event.preventDefault(); props.onSearch(); }}><input aria-label="搜索邮件" value={props.query} onChange={(event) => props.setQuery(event.target.value)} placeholder="搜索主题或发件人" /><button type="submit">搜索</button></form><div className="mailhub-workspace__filters" role="tablist" aria-label="邮件筛选">{(["all", "unread", "important", "attachments", "projects", "candidates"] as const).map((value) => <button key={value} type="button" role="tab" aria-selected={props.filter === value} onClick={() => props.onFilterChange(value)}>{filterLabel(value)}</button>)}</div>{props.threads.map((thread) => <button className="mailhub-workspace__thread" key={thread.thread_id} type="button" onClick={() => props.onThread(thread)}><strong>{thread.normalized_subject || "（无主题）"}</strong><span>{thread.account_email ?? thread.provider ?? "邮箱账号"} · {thread.participant_addresses.join("、")}</span><small>{thread.message_count} 封 · {formatDate(thread.latest_at)}{thread.unread ? " · 未读" : ""}{thread.has_attachment ? " · 附件" : ""}</small></button>)}{!props.threads.length ? <p role="status">暂无线程。</p> : null}{props.hasMore ? <button type="button" onClick={props.onLoadMore} disabled={props.loadingMore}>{props.loadingMore ? "正在加载…" : "加载更多"}</button> : null}</aside><article className="mailhub-workspace__detail">{props.detail ? <><h2>{props.detail.thread.normalized_subject}</h2>{props.detail.messages.map((message) => <div className="mailhub-workspace__message" key={message.message_id}><button type="button" onClick={() => props.onContent(message.message_id)}><strong>{message.sender_address}</strong><span>{formatDate(message.received_at)}</span></button><pre>{props.content || "正文按需读取。"}</pre></div>)}</> : <p>选择线程查看 metadata；正文不会自动展开。</p>}</article></div>;
+function Inbox(props: { text: MailHubMessages; cardHeading: HeadingTag; client: MailHubUiClient; threads: MailHubUiThread[]; detail: MailHubUiThreadDetail | null; content: string; query: string; setQuery: (value: string) => void; filter: MailHubInboxFilter; onFilterChange: (value: MailHubInboxFilter) => void; onSearch: () => void; onLoadMore: () => void; hasMore: boolean; loadingMore: boolean; onThread: (thread: MailHubUiThread) => void; onContent: (messageId: string) => void }) {
+  const { text, cardHeading: Heading } = props;
+  return <div className="mailhub-workspace__inbox"><aside><form onSubmit={(event) => { event.preventDefault(); props.onSearch(); }}><input aria-label={text.searchLabel} value={props.query} onChange={(event) => props.setQuery(event.target.value)} placeholder={text.searchPlaceholder} /><button type="submit">{text.searchAction}</button></form><div className="mailhub-workspace__filters" role="group" aria-label={text.filtersLabel}>{(["all", "unread", "important", "attachments", "projects", "candidates"] as const).map((value) => <button key={value} type="button" aria-pressed={props.filter === value} onClick={() => props.onFilterChange(value)}>{filterLabel(value, text)}</button>)}</div>{props.threads.map((thread) => <button className="mailhub-workspace__thread" key={thread.thread_id} type="button" onClick={() => props.onThread(thread)}><strong>{thread.normalized_subject || text.noSubject}</strong><span>{thread.account_email ?? thread.provider ?? text.accountFallback} · {thread.participant_addresses.join(text.addressSeparator)}</span><small>{interpolate(text.messageCount, { count: thread.message_count })} · {formatDate(thread.latest_at, text.locale)}{thread.unread ? text.unreadSuffix : ""}{thread.has_attachment ? text.attachmentSuffix : ""}</small></button>)}{!props.threads.length ? <p role="status">{text.emptyThreads}</p> : null}{props.hasMore ? <button type="button" onClick={props.onLoadMore} disabled={props.loadingMore}>{props.loadingMore ? text.loading : text.loadMore}</button> : null}</aside><article className="mailhub-workspace__detail">{props.detail ? <><Heading>{props.detail.thread.normalized_subject}</Heading>{props.detail.messages.map((message) => <div className="mailhub-workspace__message" key={message.message_id}><button type="button" onClick={() => props.onContent(message.message_id)}><strong>{message.sender_address}</strong><span>{formatDate(message.received_at, text.locale)}</span></button><pre>{props.content || text.contentPlaceholder}</pre></div>)}</> : <p>{text.selectThread}</p>}</article></div>;
 }
 
 function filterOptions(filter: MailHubInboxFilter): { unread?: boolean; important?: boolean; attachment?: boolean; project?: boolean; candidate?: boolean } {
@@ -251,19 +336,28 @@ function filterThreads(threads: MailHubUiThread[], filter: MailHubInboxFilter): 
   });
 }
 
-function filterLabel(filter: MailHubInboxFilter): string {
-  return { all: "全部", unread: "未读", important: "重要", attachments: "附件", projects: "项目", candidates: "候选" }[filter];
+function filterLabel(filter: MailHubInboxFilter, text: MailHubMessages): string {
+  return {
+    all: text.filterAll,
+    unread: text.filterUnread,
+    important: text.filterImportant,
+    attachments: text.filterAttachments,
+    projects: text.filterProjects,
+    candidates: text.filterCandidates,
+  }[filter];
 }
 
-function Candidates(props: { client: MailHubUiClient; candidates: MailHubUiCandidate[]; onRefresh: () => void }) {
-  return <div className="mailhub-workspace__cards">{props.candidates.map((candidate) => <article className="mailhub-workspace__card" key={candidate.candidate_id}><span>{candidate.candidate_type} · v{candidate.revision}</span><h2>{candidate.title ?? "未命名候选"}</h2><p>{candidate.summary ?? ""}</p><div className="mailhub-workspace__card-actions"><button type="button" onClick={async () => { await props.client.reviewCandidate({ candidateId: candidate.candidate_id, approved: false, expectedRevision: candidate.revision, reviewReason: "宿主审核拒绝" }); props.onRefresh(); }}>驳回</button><button type="button" onClick={async () => { await props.client.reviewCandidate({ candidateId: candidate.candidate_id, approved: true, expectedRevision: candidate.revision }); props.onRefresh(); }}>批准</button></div></article>)}{!props.candidates.length ? <p>暂无候选。</p> : null}</div>;
+function Candidates(props: { text: MailHubMessages; cardHeading: HeadingTag; client: MailHubUiClient; candidates: MailHubUiCandidate[]; onRefresh: () => void }) {
+  const { text, cardHeading: Heading } = props;
+  return <div className="mailhub-workspace__cards">{props.candidates.map((candidate) => <article className="mailhub-workspace__card" key={candidate.candidate_id}><span>{candidate.candidate_type} · v{candidate.revision}</span><Heading>{candidate.title ?? text.unnamedCandidate}</Heading><p>{candidate.summary ?? ""}</p><div className="mailhub-workspace__card-actions"><button type="button" onClick={async () => { await props.client.reviewCandidate({ candidateId: candidate.candidate_id, approved: false, expectedRevision: candidate.revision, reviewReason: text.rejectReason }); props.onRefresh(); }}>{text.reject}</button><button type="button" onClick={async () => { await props.client.reviewCandidate({ candidateId: candidate.candidate_id, approved: true, expectedRevision: candidate.revision }); props.onRefresh(); }}>{text.approve}</button></div></article>)}{!props.candidates.length ? <p>{text.emptyCandidates}</p> : null}</div>;
 }
 
-function Connections(props: { client: MailHubUiClient; connections: MailHubUiConnection[]; onRefresh: () => void }) {
-  return <div className="mailhub-workspace__cards">{props.connections.map((connection) => <article className="mailhub-workspace__card" key={connection.connection_id}><h2>{connection.email_address}</h2><p>{connection.provider} · {connection.content_mode ?? "受限处理"}</p><p>scope：{(connection.granted_scopes ?? []).join(" · ") || "未显示"}</p><dl className="mailhub-workspace__facts"><div><dt>连接状态</dt><dd>{connection.status}</dd></div><div><dt>同步健康</dt><dd>{connection.sync_state ?? "待检查"}</dd></div><div><dt>最近同步</dt><dd>{connection.last_sync_at ? formatDate(connection.last_sync_at) : "尚未同步"}</dd></div></dl>{connection.error_code ? <p className="mailhub-workspace__warning" role="alert">{connection.error_code} · 需要重新授权或查看运行手册。</p> : null}<div className="mailhub-workspace__card-actions"><button type="button" onClick={async () => { await props.client.enqueueSync(connection.connection_id); props.onRefresh(); }}>增量同步</button><span>{connection.status}</span></div></article>)}{!props.connections.length ? <p role="status">暂无连接。</p> : null}</div>;
+function Connections(props: { text: MailHubMessages; cardHeading: HeadingTag; client: MailHubUiClient; connections: MailHubUiConnection[]; onRefresh: () => void }) {
+  const { text, cardHeading: Heading } = props;
+  return <div className="mailhub-workspace__cards">{props.connections.map((connection) => <article className="mailhub-workspace__card" key={connection.connection_id}><Heading>{connection.email_address}</Heading><p>{connection.provider} · {connection.content_mode ?? text.boundedProcessing}</p><p>{text.scopeLabel}{(connection.granted_scopes ?? []).join(" · ") || text.notShown}</p><dl className="mailhub-workspace__facts"><div><dt>{text.statusLabel}</dt><dd>{connection.status}</dd></div><div><dt>{text.syncHealthLabel}</dt><dd>{connection.sync_state ?? text.healthUnknown}</dd></div><div><dt>{text.lastSyncLabel}</dt><dd>{connection.last_sync_at ? formatDate(connection.last_sync_at, text.locale) : text.neverSynced}</dd></div></dl>{connection.error_code ? <p className="mailhub-workspace__warning" role="alert">{connection.error_code}{text.connectionWarningSuffix}</p> : null}<div className="mailhub-workspace__card-actions"><button type="button" onClick={async () => { await props.client.enqueueSync(connection.connection_id); props.onRefresh(); }}>{text.syncNow}</button><span>{connection.status}</span></div></article>)}{!props.connections.length ? <p role="status">{text.emptyConnections}</p> : null}</div>;
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, locale: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString(locale);
 }

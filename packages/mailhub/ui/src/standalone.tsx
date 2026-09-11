@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
-import { MailHubWorkspace, type MailHubWorkspaceProps } from "./index";
+import { MailHubWorkspace, type MailHubWorkspaceProps } from "./index.js";
+import { resolveMessages } from "./i18n.js";
 
 /**
  * CSS custom properties accepted by the framework-neutral shell.  The host
@@ -20,32 +21,40 @@ export interface MailHubStandaloneProps extends MailHubWorkspaceProps {
  * Embeddable standalone shell for hosts that do not want to fork the MailHub
  * workspace.  It intentionally does not import a router, session library,
  * fetch implementation or ReactDOM; a host can mount it in any application
- * root and retain control of navigation and identity.
+ * root and retain control of navigation and identity.  Shell copy follows the
+ * same injectable locale bundle as the workspace.
  */
 export function MailHubStandalone({
   title = "MailHub",
-  subtitle = "受治理的智能邮件工作台",
+  subtitle,
+  headingLevel = 2,
   theme,
   className = "",
   headerContent,
+  locale,
+  messages,
   ...workspaceProps
 }: MailHubStandaloneProps) {
+  const text = resolveMessages(locale, messages);
   return (
     <main
-      className={`mailhub-standalone ${className}`.trim()}
+      className={["mailhub-standalone", className].filter((value) => value.length > 0).join(" ")}
       style={toThemeStyle(theme)}
-      aria-label="MailHub standalone shell"
+      aria-label={text.shellLabel}
     >
       <header className="mailhub-standalone__header">
         <div>
-          <span className="mailhub-standalone__eyebrow">MAILHUB</span>
+          <span className="mailhub-standalone__eyebrow">{text.eyebrow}</span>
           <h1>{title}</h1>
-          <p>{subtitle}</p>
+          <p>{subtitle ?? text.shellSubtitle}</p>
         </div>
         {headerContent ? <div className="mailhub-standalone__header-content">{headerContent}</div> : null}
       </header>
       <MailHubWorkspace
         {...workspaceProps}
+        headingLevel={headingLevel}
+        locale={locale}
+        messages={messages}
         className="mailhub-standalone__workspace"
       />
     </main>

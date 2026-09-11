@@ -11,6 +11,6 @@ $env:PYTHONPATH = "packages/mailhub/sdk/python"
 python packages/mailhub/examples/sdk/python_client.py
 ```
 
-TypeScript hosts should install/link `@mailhub/client` and compile
+TypeScript hosts should install/link `@fyjtech/mailhub-client` and compile
 `typescript_client.ts` with their own runtime types. Neither example accepts
 or prints OAuth/SMTP credentials, raw message content, or real mailbox data.

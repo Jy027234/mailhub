@@ -34,7 +34,7 @@ def main() -> None:
         "version": 1,
         "metadata": {
             "component": {"type": "application", "name": "mailhub", "version": "0.1.0"},
-            "tools": [{"vendor": "CAPlatform", "name": "mailhub.generate_sbom", "version": "1"}],
+            "tools": [{"vendor": "fyjtech", "name": "mailhub.generate_sbom", "version": "1"}],
             "properties": [{"name": "python.version", "value": platform.python_version()}],
         },
         "components": components,

@@ -1,4 +1,4 @@
-import { MailHubClient } from "@mailhub/client";
+import { MailHubClient } from "@fyjtech/mailhub-client";
 
 const client = new MailHubClient({
   baseUrl: process.env.MAILHUB_URL ?? "http://127.0.0.1:8000",
