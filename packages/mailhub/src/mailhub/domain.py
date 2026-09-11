@@ -625,6 +625,10 @@ class MailOutboxOperation:
     policy_revision: int | None = None
     grant_revision: int | None = None
     approval_ref: str | None = None
+    # Who approved the send, once the host verified the confirmation.  Persisted
+    # so the pre-I/O re-check can re-assert separation of duties instead of
+    # re-validating a confirmation whose approver is no longer known.
+    approver_subject_id: str | None = None
     attempt_count: int = 0
     lease_owner: str | None = None
     lease_expires_at: datetime | None = None

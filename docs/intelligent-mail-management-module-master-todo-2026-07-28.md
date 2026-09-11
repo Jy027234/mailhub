@@ -1535,7 +1535,11 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    （线上始终携带 `approver_subject_id`，字符串=新批准、显式 null=再校验）；四眼由 `HOST_REQUIRE_FOUR_EYES` 配置，
    开启时自批与匿名批准一律拒绝且不消费。测试 +5（5/6 对旧实现失败，已用 stash 实证）。
    参考宿主 conformance bundle 改以严格策略产生：44 项检查全通过、`not_implemented` 为空。
-   仍在开放：审批人身份未持久化到 outbox operation（需加列 + 迁移）；`OUTCOME_UNKNOWN` 真实对账。
+   **2026-09-11 审批人身份已持久化、四眼链路闭合**：`mail_outbox_operations` 新增 `approver_subject_id`
+   （迁移 0022 + down 脚本），排队时记录批准者；发信前再校验携带该持久化身份并置 `revalidation=True`，
+   宿主据此重新断言职责分离，而不是「确认已消费」就放行——「不知道谁批的」不再等于通过。端口与 HTTP
+   适配器增加显式 `revalidation` 标志（此前靠是否传审批人隐式区分，再校验也要带身份后无法表达）。
+   仍在开放：`OUTCOME_UNKNOWN` 真实对账。
 
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；

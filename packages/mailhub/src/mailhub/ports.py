@@ -302,6 +302,7 @@ class ApprovalPort(Protocol):
         confirmation_ref: str,
         action: AgentActionRequest,
         approver_subject_id: str | None = None,
+        revalidation: bool = False,
     ) -> bool:
         """Answer whether ``action`` was approved under ``confirmation_ref``.
 
@@ -312,9 +313,11 @@ class ApprovalPort(Protocol):
         stricter policy keep working unchanged, and the conformance kit reports
         their separation of duties as unproven rather than as passed.
 
-        ``None`` means the caller is re-validating a confirmation that was
-        already exercised -- the pre-send re-check -- not presenting a fresh
-        approval, so it must not be read as a distinct approver.
+        ``revalidation=True`` marks the pre-send re-check of an approval that
+        was already exercised, as opposed to presenting a fresh one.  The
+        approver identity is still supplied so the host can re-assert
+        separation of duties on the same principal rather than lose track of who
+        approved once the confirmation has been consumed.
         """
         ...
 

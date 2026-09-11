@@ -1355,10 +1355,14 @@ class HttpApprovalAdapter(_HttpPortBase, ApprovalPort):
         confirmation_ref: str,
         action: AgentActionRequest,
         approver_subject_id: str | None = None,
+        revalidation: bool = False,
     ) -> bool:
         body: dict[str, object] = {
             "confirmation_ref": confirmation_ref,
             "action": _action_json(action),
+            # Explicit rather than inferred from an absent identity, so the
+            # approver can still be named on a re-validation.
+            "revalidation": revalidation,
         }
         # Always present, including an explicit null: the host has to be able to
         # tell a fresh approval act from a re-validation of one already

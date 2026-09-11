@@ -147,12 +147,13 @@ class InMemoryApprovalPort(ApprovalPort):
         confirmation_ref: str,
         action: AgentActionRequest,
         approver_subject_id: str | None = None,
+        revalidation: bool = False,
     ) -> bool:
         # A single-principal double cannot separate the requester from the
         # approver, so the identity is accepted and deliberately not enforced.
         # The conformance kit is expected to report separation of duties as
         # unproven for this port rather than as satisfied.
-        del approver_subject_id
+        del approver_subject_id, revalidation
         return (
             confirmation_ref in self._approved
             or confirmation_ref == f"local-confirmation:{action.action_id}"
@@ -4328,6 +4329,7 @@ class MailService:
             policy_revision=policy.revision if policy is not None else None,
             grant_revision=grant.revision if grant is not None else None,
             approval_ref=confirmation_ref if confirmed else None,
+            approver_subject_id=subject_id if confirmed else None,
         )
         stored, created = await self.repository.create_or_get_operation(operation)
         await self.repository.append_audit(
@@ -4773,9 +4775,11 @@ class MailService:
                 confirmation_ref=operation.approval_ref,
                 action=action,
                 # Re-validation immediately before provider I/O, not a fresh
-                # approval act: the approver's identity is not persisted on the
-                # operation yet, so asserting one here would be a lie.
-                approver_subject_id=None,
+                # approval act.  The approver persisted when the draft was
+                # queued is presented again so the host can re-assert
+                # separation of duties on the same identity.
+                approver_subject_id=operation.approver_subject_id,
+                revalidation=True,
             )
         ):
             return None
@@ -4784,7 +4788,8 @@ class MailService:
             or not await self.approval_port.verify_confirmation(
                 confirmation_ref=operation.approval_ref,
                 action=action,
-                approver_subject_id=None,
+                approver_subject_id=operation.approver_subject_id,
+                revalidation=True,
             )
         ):
             return "approval_revoked"

@@ -564,6 +564,49 @@ def test_four_eyes_refuses_self_approval_and_anonymous_approval(tmp_path: Path) 
     )
 
 
+def test_revalidation_reasserts_the_recorded_approver(tmp_path: Path) -> None:
+    """The pre-send re-check must re-assert four-eyes, not just existence.
+
+    The approver is persisted on the outbox operation so this check still knows
+    who approved, even though the confirmation itself was consumed at queue
+    time.
+    """
+
+    strict = LocalStores(tmp_path / "strict.db", _SECRET, require_four_eyes=True)
+    strict.initialize()
+    ref = strict.create_approval(
+        tenant_id="tenant-1", subject_id="user-1", action_id="a1", action_digest="d1"
+    )
+
+    def revalidate(approver: str | None) -> bool:
+        return strict.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id=approver,
+            revalidation=True,
+        )
+
+    # Nothing has been exercised yet, so there is nothing to re-validate.
+    assert revalidate("user-2") is False
+
+    assert (
+        strict.verify_approval(
+            confirmation_ref=ref,
+            action_id="a1",
+            action_digest="d1",
+            approver_subject_id="user-2",
+        )
+        is True
+    )
+    # The same approver re-validates...
+    assert revalidate("user-2") is True
+    # ...a different principal, the requester, or nobody at all does not.
+    assert revalidate("user-3") is False
+    assert revalidate("user-1") is False
+    assert revalidate(None) is False
+
+
 def test_initialize_adds_consumption_columns_to_an_existing_database(
     tmp_path: Path,
 ) -> None:

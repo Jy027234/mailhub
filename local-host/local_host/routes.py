@@ -160,7 +160,6 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         # act by that principal, an explicit null is a re-validation of an act
         # already exercised.  A caller that omits it predates the field and is
         # treated as presenting a fresh approval.
-        revalidation = False
         approver: str | None = None
         if "approver_subject_id" in body:
             raw = body["approver_subject_id"]
@@ -169,7 +168,12 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                     status_code=422, detail={"code": "approval_approver_invalid"}
                 )
             approver = raw
-            revalidation = raw is None
+        if "revalidation" in body:
+            revalidation = bool(body["revalidation"])
+        else:
+            # A caller that predates the explicit flag said it by omitting the
+            # approver, so keep reading it that way.
+            revalidation = "approver_subject_id" in body and approver is None
         verified = stores.verify_approval(
             confirmation_ref=confirmation_ref,
             action_id=action_id,

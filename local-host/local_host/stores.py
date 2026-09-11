@@ -437,7 +437,7 @@ class LocalStores:
 
         with self._connect() as db:
             row = db.execute(
-                """SELECT subject_id, action_id, action_digest, consumed_at
+                """SELECT subject_id, action_id, action_digest, consumed_at, consumed_by
                    FROM host_approvals WHERE confirmation_ref=?""",
                 (confirmation_ref,),
             ).fetchone()
@@ -447,10 +447,20 @@ class LocalStores:
             stored_digest = str(row["action_digest"])
             consumed = row["consumed_at"] is not None
             if revalidation:
-                return (
-                    consumed
-                    and stored_id == action_id
-                    and hmac.compare_digest(stored_digest, action_digest)
+                if not consumed:
+                    return False
+                # Re-assert separation of duties on the identity recorded at
+                # approval time, rather than trusting whoever asks now that the
+                # confirmation has been consumed.
+                if (str(row["consumed_by"] or "")) != (approver_subject_id or ""):
+                    return False
+                if self._require_four_eyes and (
+                    not approver_subject_id
+                    or approver_subject_id == str(row["subject_id"])
+                ):
+                    return False
+                return stored_id == action_id and hmac.compare_digest(
+                    stored_digest, action_digest
                 )
             if consumed:
                 return False

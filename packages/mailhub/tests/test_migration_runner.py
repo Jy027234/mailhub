@@ -43,6 +43,7 @@ def test_migration_runner_discovers_checksums_and_order() -> None:
         19,
         20,
         21,
+        22,
     ]
     assert all(len(item.checksum) == 64 for item in migrations)
     assert "BEGIN;" not in runner.migration_sql(migrations[1].up_path)

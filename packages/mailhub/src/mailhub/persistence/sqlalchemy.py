@@ -361,6 +361,7 @@ operations = _table(
     Column("policy_revision", BIGINT),
     Column("grant_revision", BIGINT),
     Column("approval_ref", TEXT),
+    Column("approver_subject_id", TEXT),
     Column("attempt_count", INTEGER, nullable=False),
     Column("lease_owner", TEXT),
     Column("lease_expires_at", UTC_DATETIME),
@@ -3252,6 +3253,7 @@ def _operation_values(value: MailOutboxOperation) -> dict[str, object]:
         "policy_revision": value.policy_revision,
         "grant_revision": value.grant_revision,
         "approval_ref": value.approval_ref,
+        "approver_subject_id": value.approver_subject_id,
         "attempt_count": value.attempt_count,
         "lease_owner": value.lease_owner,
         "lease_expires_at": value.lease_expires_at,
@@ -3284,6 +3286,7 @@ def _operation_from_row(row: Mapping[Any, Any]) -> MailOutboxOperation:
         ),
         grant_revision=(int(row["grant_revision"]) if row["grant_revision"] is not None else None),
         approval_ref=cast(str | None, row["approval_ref"]),
+        approver_subject_id=cast(str | None, row["approver_subject_id"]),
         attempt_count=int(row["attempt_count"]),
         lease_owner=cast(str | None, row["lease_owner"]),
         lease_expires_at=(
