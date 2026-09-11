@@ -1,0 +1,40 @@
+{
+  "account_digest": "0105bbfa262d",
+  "account_domain": "bmshkb.com",
+  "attempts": 3,
+  "checks": {
+    "body_marker_survived": true,
+    "no_duplicate_on_single_pass": true,
+    "receipt_message_id_present": true,
+    "received_message_id_matches_receipt": true,
+    "received_within_budget": true,
+    "recipient_set_survived": true,
+    "second_pass_sees_it_once": true,
+    "sender_address_matches_account": true,
+    "subject_marker_survived": true
+  },
+  "elapsed_seconds": 16.58,
+  "folder": "INBOX",
+  "imap_host": "imap.qiye.163.com",
+  "marker": "879b75192b5f",
+  "observed_at": "2026-09-11T14:18:14.893624+00:00",
+  "passed": true,
+  "poll_seconds": 6.0,
+  "provider": "imap_smtp",
+  "received": {
+    "attachment_count": 0,
+    "body_has_marker": true,
+    "message_id": "<mailhub-c0d861b9-082c-41eb-965a-7c2b17b87506@mailhub.invalid>",
+    "provider_message_ref": "INBOX:1:1730701467",
+    "recipients_match": true,
+    "sender_matches": true,
+    "subject_has_marker": true
+  },
+  "schema": "mailhub.smtp_provider_roundtrip.v1",
+  "sent": {
+    "body_bytes": 106,
+    "message_id": "<mailhub-c0d861b9-082c-41eb-965a-7c2b17b87506@mailhub.invalid>",
+    "subject_bytes": 57
+  },
+  "smtp_host": "smtp.qiye.163.com"
+}

@@ -1506,8 +1506,15 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    **正文/主题夹带地址进不了信封** · 发送关闭与缺凭据 fail-closed。
    **实测发现的缺口已补**：新增 `max_send_bytes`（连接器默认 10 MiB、可经 `MAILHUB_SMTP_MAX_SEND_BYTES` 调整），
    在**建立 SMTP 连接之前**校验，超限抛不可重试的 `smtp_message_too_large`（重试永远失败的条件不该被重试）；
-   夹具用例由"测量"改为"强制"并线上验证**超限时未发出任何字节**。真实 163 自发自收 + 增量回读的端到端一致性
-   与四眼审批生产语义仍开放，故本条不勾选。
+   夹具用例由"测量"改为"强制"并线上验证**超限时未发出任何字节**。
+   **2026-08-19 真实 163 端到端往返（MAIL-SMTP-001/002 的 Provider 侧证据）**：
+   `packages/mailhub/scripts/smtp_provider_roundtrip.py` 用真实 `ImapSmtpConnector` 向**自己的邮箱**发一封
+   带 `[mailhub-roundtrip <marker>]` 前缀的邮件，再经 incremental sync 读回核对，**9/9 通过**：
+   收到的 `Message-ID` 与回执**完全一致**（证明回执可对账）、主题/正文标记存活、收件人集合存活、
+   发件人=认证账号、单次通过无重复、二次通过只见一次；100–16.6s 内 3 次轮询命中。证据
+   `docs/reports/mailhub-smtp-provider-roundtrip-163-2026-08-19.json`（账号只存域名+摘要，离线 `--validate` 通过，
+   14 项测试）。**注意**：该自发邮件留在邮箱中，主题带 marker 前缀便于清理。
+   四眼审批生产语义与 `OUTCOME_UNKNOWN` 真实对账仍开放，故本条不勾选。
 - [ ] **MAIL-CONN-001（P1/MH）**：发布第三方 Connector SDK、capability descriptor 和 conformance certification。
   已提供 Python/TypeScript source SDK、`ProviderCapabilities`、纯函数 conformance kit、Host adapter guide 和 Sandbox-only certification tests；第三方发布包、真实 Provider certification evidence 与版本兼容表仍开放。
 - [x] **MAIL-CONN-002（P2/MH）**：支持 EML/MBOX 只读导入作为迁移/测试入口，不将其宣称为实时邮箱连接。
