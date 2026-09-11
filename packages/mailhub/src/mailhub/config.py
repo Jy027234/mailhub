@@ -87,6 +87,8 @@ class MailHubSettings(BaseModel):
     smtp_port: int = Field(default=465, ge=1, le=65535)
     imap_folder: str = Field(default="INBOX", min_length=1, max_length=200)
     smtp_send_enabled: bool = False
+    # Outbound bound the connector enforces before contacting the provider.
+    smtp_max_send_bytes: int = Field(default=10 * 1024 * 1024, ge=64 * 1024, le=64 * 1024 * 1024)
 
     @classmethod
     def from_env(cls) -> MailHubSettings:
@@ -164,6 +166,7 @@ class MailHubSettings(BaseModel):
             smtp_port=_env_int("MAILHUB_SMTP_PORT", 465),
             imap_folder=os.getenv("MAILHUB_IMAP_FOLDER", "INBOX"),
             smtp_send_enabled=_env_bool("MAILHUB_SMTP_SEND_ENABLED", default=False),
+            smtp_max_send_bytes=_env_int("MAILHUB_SMTP_MAX_SEND_BYTES", 10 * 1024 * 1024),
         )
 
     def analysis_policy(self) -> AnalysisPolicy:

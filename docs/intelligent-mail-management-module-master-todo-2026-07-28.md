@@ -1496,8 +1496,10 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    线上验证：信封发件人=认证账号（无法伪造发件人 → 不能把 MailHub 当开放中继）· 信封收件人=To∪Cc∪Bcc ·
    **`Bcc` 不落传输头** · `Message-ID` 与回执一致 · 回复头 `In-Reply-To`/`References` 正确 ·
    **正文/主题夹带地址进不了信封** · 发送关闭与缺凭据 fail-closed。
-   **实测发现：connector 内无报文大小上限（1.5MB 正文被接受，wire 1,558,720 字节）**；真实 163 自发自收
-   + 增量回读的端到端一致性与四眼审批生产语义仍开放，故本条不勾选。
+   **实测发现的缺口已补**：新增 `max_send_bytes`（连接器默认 10 MiB、可经 `MAILHUB_SMTP_MAX_SEND_BYTES` 调整），
+   在**建立 SMTP 连接之前**校验，超限抛不可重试的 `smtp_message_too_large`（重试永远失败的条件不该被重试）；
+   夹具用例由"测量"改为"强制"并线上验证**超限时未发出任何字节**。真实 163 自发自收 + 增量回读的端到端一致性
+   与四眼审批生产语义仍开放，故本条不勾选。
 - [ ] **MAIL-CONN-001（P1/MH）**：发布第三方 Connector SDK、capability descriptor 和 conformance certification。
   已提供 Python/TypeScript source SDK、`ProviderCapabilities`、纯函数 conformance kit、Host adapter guide 和 Sandbox-only certification tests；第三方发布包、真实 Provider certification evidence 与版本兼容表仍开放。
 - [x] **MAIL-CONN-002（P2/MH）**：支持 EML/MBOX 只读导入作为迁移/测试入口，不将其宣称为实时邮箱连接。

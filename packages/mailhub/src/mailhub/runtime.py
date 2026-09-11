@@ -99,6 +99,7 @@ def create_durable_app(runtime_settings: MailHubSettings | None = None) -> FastA
             smtp_port=settings.smtp_port,
             folder=settings.imap_folder,
             send_enabled=settings.outbound_enabled and settings.smtp_send_enabled,
+            max_send_bytes=settings.smtp_max_send_bytes,
         )
 
     oauth_service, oauth_callback = _build_default_oauth(settings)

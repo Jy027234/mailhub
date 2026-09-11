@@ -53,7 +53,9 @@ TO_ADDRESS = "recipient-to@example.test"
 CC_ADDRESS = "recipient-cc@example.test"
 BCC_ADDRESS = "recipient-bcc@example.test"
 SMUGGLED_ADDRESS = "smuggled@attacker.test"
-LARGE_BODY_BYTES = 1_500_000
+# Deliberately small so the oversize case stays fast; the connector default is
+# 10 MiB and the same code path is exercised either way.
+SEND_LIMIT_BYTES = 256 * 1024
 
 FORBIDDEN_KEY_MARKERS = (
     "password",
@@ -145,7 +147,7 @@ def validate_bundle(bundle: Mapping[str, Any]) -> list[str]:
             "send_disabled_refused",
             "missing_password_refused",
             "audience_injection_blocked",
-            "size_behaviour_measured",
+            "size_limit_enforced",
         ):
             if required not in names:
                 issues.append("case_missing:" + required)
@@ -297,6 +299,7 @@ def build_connector(port: int, *, send_enabled: bool = True) -> Any:
         smtp_host="127.0.0.1",
         smtp_port=port,
         send_enabled=send_enabled,
+        max_send_bytes=SEND_LIMIT_BYTES,
     )
 
 
@@ -336,7 +339,7 @@ def _header_block(raw: bytes) -> str:
 
 
 async def run_cases(capture: Capture, port: int) -> list[Case]:
-    from mailhub.errors import ProviderFailureError
+    from mailhub.errors import ProviderFailureError, ValidationError
 
     cases: list[Case] = []
     credential = {"username": SENDER, "password": APP_PASSWORD}
@@ -472,28 +475,38 @@ async def run_cases(capture: Capture, port: int) -> list[Case]:
         )
     )
 
-    # 7. size behaviour is measured, not assumed ---------------------------
+    # 7. the outbound bound is enforced before the provider is contacted -----
+    limit = connector.max_send_bytes
     before = len(capture.envelopes)
-    oversize_accepted = False
+    oversize_refused = False
     detail = ""
     try:
         await connector.send(
-            build_request(to=[TO_ADDRESS], body="x" * LARGE_BODY_BYTES),
+            build_request(to=[TO_ADDRESS], body="x" * (limit + 4096)),
             credential=credential,
         )
-        oversize_accepted = True
-    except Exception as exc:  # noqa: BLE001 - the point is to record behaviour
-        detail = f"{type(exc).__name__}: {exc}"
-    measured = capture.data_bytes[before] if len(capture.data_bytes) > before else 0
+    except ValidationError as exc:
+        oversize_refused = exc.message == "smtp_message_too_large"
+        detail = exc.message
+    except Exception as exc:  # noqa: BLE001 - a different failure is the finding
+        detail = f"unexpected {type(exc).__name__}: {exc}"
+    nothing_transmitted = len(capture.envelopes) == before
+    under_limit_accepted = False
+    try:
+        await connector.send(build_request(to=[TO_ADDRESS], body="x" * 2048), credential=credential)
+        under_limit_accepted = True
+    except Exception as exc:  # noqa: BLE001
+        detail = f"{detail} under_limit_failed={type(exc).__name__}".strip()
     cases.append(
         Case(
-            name="size_behaviour_measured",
-            # The case records behaviour; it fails only if the measured size is
-            # inconsistent with the observation, never to hide a missing cap.
-            passed=(measured > 0) == oversize_accepted,
-            checks={"connector_size_cap_enforced": not oversize_accepted},
-            detail=f"body_bytes={LARGE_BODY_BYTES} accepted={oversize_accepted} "
-            f"wire_bytes={measured} {detail}".strip(),
+            name="size_limit_enforced",
+            passed=oversize_refused and nothing_transmitted and under_limit_accepted,
+            checks={
+                "oversize_refused_smtp_message_too_large": oversize_refused,
+                "nothing_transmitted_before_refusal": nothing_transmitted,
+                "under_limit_still_accepted": under_limit_accepted,
+            },
+            detail=f"limit={limit} bytes {detail}".strip(),
         )
     )
     return cases
@@ -532,14 +545,10 @@ def run(*, json_path: Path | None) -> int:
         "cases": [case.to_dict() for case in cases],
         "summary": {"total": len(cases), "passed": passed},
     }
-    findings: list[str] = []
-    size_case = next((case for case in cases if case.name == "size_behaviour_measured"), None)
-    if size_case is not None and size_case.checks.get("connector_size_cap_enforced") is False:
-        findings.append(
-            "connector enforces no message size cap: a "
-            f"{LARGE_BODY_BYTES}-byte body was accepted (MAIL-SMTP-002 open item)"
-        )
-    bundle["findings"] = findings
+    bundle["observations"] = [
+        f"outbound message bound enforced at {SEND_LIMIT_BYTES} bytes before the "
+        "provider is contacted"
+    ]
 
     issues = validate_bundle(bundle)
     for case in cases:
@@ -547,8 +556,8 @@ def run(*, json_path: Path | None) -> int:
         print(f"  [{marker}] {case.name}" + (f" - {case.detail}" if case.detail else ""))
         for check, ok in case.checks.items():
             print(f"          {'ok' if ok else 'NO'} {check}")
-    for finding in findings:
-        print("  [FINDING] " + finding)
+    for observation in bundle["observations"]:
+        print("  [NOTE] " + observation)
     for issue in issues:
         print("  [FAIL] " + issue)
     print(

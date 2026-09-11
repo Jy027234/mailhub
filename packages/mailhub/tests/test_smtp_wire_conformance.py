@@ -24,7 +24,7 @@ REQUIRED_CASES = (
     "send_disabled_refused",
     "missing_password_refused",
     "audience_injection_blocked",
-    "size_behaviour_measured",
+    "size_limit_enforced",
 )
 
 

@@ -90,8 +90,12 @@ providers:
         - audience_injection_cannot_reach_envelope
         - send_disabled_refused
         - missing_credential_refused
-      open_findings:
-        - connector_enforces_no_message_size_cap
+      size_bound:
+        enforced_before_connect: true
+        default_bytes: 10485760
+        configurable_via: MAILHUB_SMTP_MAX_SEND_BYTES
+        refusal_error: smtp_message_too_large
+        non_retryable: true
       observed_163_qiye_enterprise:
         tls: TLSv1.3
         auth: [AUTH=PLAIN]
@@ -109,7 +113,7 @@ providers:
     restrictions:
       - poll_is_the_only_path_on_163_idle_absent
       - modseq_cursor_unavailable_on_both_verified_servers
-      - connector_has_no_message_size_cap_smtp_002_open
+      - smtp_002_still_open_for_real_provider_reconciliation
       - uidplus_absent_no_uid_expunge_on_163
       - qq_dovecot_exchange_rows_still_open
       - smtp_send_disabled_by_default

@@ -80,20 +80,22 @@
     },
     {
       "checks": {
-        "connector_size_cap_enforced": false
+        "nothing_transmitted_before_refusal": true,
+        "oversize_refused_smtp_message_too_large": true,
+        "under_limit_still_accepted": true
       },
-      "detail": "body_bytes=1500000 accepted=True wire_bytes=1558720",
-      "name": "size_behaviour_measured",
+      "detail": "limit=262144 bytes smtp_message_too_large",
+      "name": "size_limit_enforced",
       "passed": true
     }
   ],
   "certificate": "self_signed_localhost_trusted_via_SSL_CERT_FILE",
   "connector": "mailhub.connectors.imap_smtp.ImapSmtpConnector",
-  "findings": [
-    "connector enforces no message size cap: a 1500000-byte body was accepted (MAIL-SMTP-002 open item)"
-  ],
   "implicit_tls": true,
-  "observed_at": "2026-09-11T08:01:08.537997+00:00",
+  "observations": [
+    "outbound message bound enforced at 262144 bytes before the provider is contacted"
+  ],
+  "observed_at": "2026-09-11T14:07:47.025278+00:00",
   "schema": "mailhub.smtp_wire_conformance.v1",
   "summary": {
     "passed": 7,

@@ -1131,6 +1131,43 @@ def test_smtp_send_is_explicitly_disabled_until_enabled() -> None:
     assert connector.capabilities.supports_send is False
 
 
+@pytest.mark.asyncio
+async def test_smtp_send_refuses_a_message_over_the_outbound_bound() -> None:
+    """The bound is enforced before connecting, so the provider never sees it."""
+
+    from mailhub.errors import ValidationError
+
+    connector = ImapSmtpConnector(
+        imap_host="imap.example.test",
+        smtp_host="smtp.example.test",
+        # Port 1 is unreachable on purpose: a connection attempt would fail with
+        # a different error, which proves the refusal happens before any socket.
+        smtp_port=1,
+        send_enabled=True,
+        max_send_bytes=64 * 1024,
+    )
+    request = ProviderSendRequest(
+        operation_id=uuid4(),
+        connection_id=uuid4(),
+        thread_ref="thread-1",
+        recipient_addresses=("to@example.test",),
+        subject="Subject",
+        body_text="x" * (64 * 1024),
+        content_sha256=digest_text("x"),
+        idempotency_key="send-large",
+    )
+
+    with pytest.raises(ValidationError, match="smtp_message_too_large"):
+        await connector.send(request, credential={"username": "a@example.test", "password": "p"})
+
+
+def test_smtp_outbound_bound_is_validated() -> None:
+    with pytest.raises(ValueError, match="max_send_bytes_invalid"):
+        ImapSmtpConnector(
+            imap_host="imap.example.test", smtp_host="smtp.example.test", max_send_bytes=1024
+        )
+
+
 def test_http_provider_message_preserves_cc_bcc_and_reply_headers() -> None:
     request = ProviderSendRequest(
         operation_id=uuid4(),

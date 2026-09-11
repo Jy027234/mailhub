@@ -24,7 +24,7 @@ from email.utils import getaddresses, parsedate_to_datetime
 from uuid import uuid4
 
 from mailhub.domain import MailboxConnection, ProviderName
-from mailhub.errors import OutcomeUnknownError, ProviderFailureError
+from mailhub.errors import OutcomeUnknownError, ProviderFailureError, ValidationError
 from mailhub.ports import (
     ProviderCapabilities,
     ProviderConnector,
@@ -52,6 +52,7 @@ class ImapSmtpConnector(ProviderConnector):
         folder: str = "INBOX",
         timeout_seconds: float = 30.0,
         send_enabled: bool = False,
+        max_send_bytes: int = 10 * 1024 * 1024,
         max_connections: int = 2,
         retry_attempts: int = 3,
         retry_backoff_seconds: float = 0.25,
@@ -66,6 +67,8 @@ class ImapSmtpConnector(ProviderConnector):
             raise ValueError("retry_attempts_invalid")
         if not 0.01 <= retry_backoff_seconds <= 30:
             raise ValueError("retry_backoff_invalid")
+        if not 64 * 1024 <= max_send_bytes <= 64 * 1024 * 1024:
+            raise ValueError("max_send_bytes_invalid")
         self.imap_host = _host(imap_host, "imap_host")
         self.smtp_host = _host(smtp_host, "smtp_host")
         self.imap_port = imap_port
@@ -73,6 +76,7 @@ class ImapSmtpConnector(ProviderConnector):
         self.folder = _text(folder, "folder", 200)
         self.timeout_seconds = timeout_seconds
         self.send_enabled = send_enabled
+        self.max_send_bytes = max_send_bytes
         self.max_connections = max_connections
         self.retry_attempts = retry_attempts
         self.retry_backoff_seconds = retry_backoff_seconds
@@ -97,6 +101,7 @@ class ImapSmtpConnector(ProviderConnector):
                 "TLS required",
                 "UIDVALIDITY cursor",
                 "SMTP send requires explicit enable and application-password credential",
+                f"outbound message limit {self.max_send_bytes} bytes",
             ),
         )
 
@@ -283,6 +288,11 @@ class ImapSmtpConnector(ProviderConnector):
             message["In-Reply-To"] = request.in_reply_to_message_ref
             message["References"] = request.in_reply_to_message_ref
         message.set_content(request.body_text)
+        # The outbound bound is enforced before a connection is opened: a message
+        # that can never be accepted must not reach the provider, and the refusal
+        # is deliberately non-retryable so the outbox cannot loop on it.
+        if len(message.as_bytes()) > self.max_send_bytes:
+            raise ValidationError("smtp_message_too_large")
         with smtplib.SMTP_SSL(
             self.smtp_host, self.smtp_port, timeout=self.timeout_seconds
         ) as client:
