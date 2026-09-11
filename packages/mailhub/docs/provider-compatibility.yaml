@@ -61,10 +61,55 @@ providers:
     release_scope: primary
     status: real_mailbox_partial
     connector: mailhub.connectors.imap_smtp.ImapSmtpConnector
-    capabilities: [tls, xoauth2_or_application_password, uidvalidity_cursor, modseq_cursor, smtp_outbox]
-    evidence: [tests/test_connectors.py, local-host/scripts/b4_imap.py, local-host/scripts/b4_send.py]
-    domestic_evidence: 网易企业邮箱 imap.qiye.163.com:993 真实只读切片（backfill 50 / 增量 0 重复 / 45 线程 / 50 分析 / 1 知识候选）+ smtp.qiye.163.com:465 受控发送闭环；属本地单用户证据，不替代服务器矩阵 / IDLE / SMTP 对账。
+    capabilities: [tls, application_password_auth, uidvalidity_cursor, optional_modseq_cursor, smtp_outbox]
+    evidence: [tests/test_connectors.py, local-host/scripts/b4_imap.py, local-host/scripts/b4_send.py, scripts/imap_server_matrix_probe.py, ../../docs/reports/mailhub-imap-server-matrix-2026-08-19.md]
+    domestic_evidence: 网易企业邮箱 imap.qiye.163.com:993 真实只读切片（backfill 50 / 增量 0 重复 / 45 线程 / 50 分析 / 1 知识候选）+ smtp.qiye.163.com:465 受控发送闭环；属本地单用户证据，不替代服务器矩阵 / SMTP 对账。
+    server_matrix:
+      verified: [163_qiye_enterprise, qq_mail]
+      still_open: [dovecot, self_hosted_exchange]
+      probe: scripts/imap_server_matrix_probe.py
+      evidence: ../../docs/reports/mailhub-imap-server-matrix-2026-08-19.md
+      capability_divergence:
+        note: 能力必须按服务器协商，任何写死都会在真实服务器上说谎
+        idle: {163_qiye_enterprise: false, qq_mail: true}
+        condstore: {163_qiye_enterprise: false, qq_mail: false}
+        uidplus: {163_qiye_enterprise: false, qq_mail: true}
+        move: {163_qiye_enterprise: false, qq_mail: true}
+        namespace: {163_qiye_enterprise: false, qq_mail: true}
+        quota: {163_qiye_enterprise: false, qq_mail: false}
+        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: true}
+    smtp_wire_evidence:
+      harness: scripts/smtp_wire_conformance.py
+      evidence: ../../docs/reports/mailhub-smtp-wire-conformance-2026-08-19.json
+      verified:
+        - envelope_sender_is_authenticated_account
+        - envelope_recipients_equal_to_cc_bcc
+        - bcc_never_transmitted
+        - message_id_matches_receipt
+        - reply_headers_present
+        - audience_injection_cannot_reach_envelope
+        - send_disabled_refused
+        - missing_credential_refused
+      open_findings:
+        - connector_enforces_no_message_size_cap
+      observed_163_qiye_enterprise:
+        tls: TLSv1.3
+        auth: [AUTH=PLAIN]
+        uidvalidity: 1
+        uidnext_invariant_holds: true
+        exists_matches_uid_search: true
+        idle: false
+        condstore: false
+        uidplus: false
+        move: false
+        namespace: false
+        quota: false
+        status_field_order_guaranteed: false
+        poll_is_the_only_supported_path: true
     restrictions:
-      - server_matrix_and_idle_compatibility_not_claimed
+      - poll_is_the_only_path_on_163_idle_absent
+      - modseq_cursor_unavailable_on_both_verified_servers
+      - connector_has_no_message_size_cap_smtp_002_open
+      - uidplus_absent_no_uid_expunge_on_163
+      - qq_dovecot_exchange_rows_still_open
       - smtp_send_disabled_by_default
-      - real_multi_server_matrix_qq_dovecot_exchange_and_smtp_reconciliation_still_open

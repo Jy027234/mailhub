@@ -1473,9 +1473,31 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
 - [ ] **MAIL-IMAP-004（P0/MH）**：实现断线、并发连接限制、服务器不一致、部分 FETCH、超时和指数退避。
   已加入有界连接 semaphore、瞬时断线/部分 FETCH 重试、指数退避+jitter；真实服务器差异和长期运行演练仍开放。
 - [ ] **MAIL-IMAP-005（P1/MH）**：建立 QQ、163、标准 Dovecot 和自建 Exchange/其他服务器的真实兼容矩阵。
+   **2026-08-19 矩阵第 1 行实测（163 企业邮箱）**：只读探针 `packages/mailhub/scripts/imap_server_matrix_probe.py` +
+   证据 `docs/reports/mailhub-imap-server-matrix-163-2026-08-19.json` + 报告
+   `docs/reports/mailhub-imap-server-matrix-2026-08-19.md`。实测：TLSv1.3 / 仅 `AUTH=PLAIN` /
+   `UIDVALIDITY=1`、`UIDNEXT=max UID+1`、`EXISTS=UID SEARCH=178`、7 文件夹、分隔符 `/`、
+   元数据 FETCH 5/5、5 次独立会话完全一致。**关键缺失：无 `IDLE`、无 `CONDSTORE`、无 `UIDPLUS`、
+   无 `MOVE`、无 `NAMESPACE`/`QUOTA`、无 `AUTH=XOAUTH2`** → 受控 poll 为唯一路径，MODSEQ 游标不可用。
+   另发现该服务器 `STATUS` **不按请求顺序返回字段**，按位置解析会伪造游标重置（采集器已改为按字段名解析
+   并加不变量交叉校验）。
+   **2026-08-19 矩阵第 2 行实测（QQ 邮箱 imap.qq.com:993）**：14 项能力，**具备 `IDLE`、`MOVE`、`UIDPLUS`、
+   `NAMESPACE`、`AUTH=XOAUTH2`** —— 与 163 形成相反对比（163 这些全部缺失）；`UIDVALIDITY=1789113608`、
+   `UIDNEXT=max UID+1`、`EXISTS=UID SEARCH=324`、7 文件夹、分隔符 `/`、跨会话三项读数稳定。
+   **结论：能力必须按服务器协商——把 `IDLE`/`UIDPLUS`/`MOVE` 写死会在真实服务器上说谎。**
+   Dovecot / 自建 Exchange 两行**仍开放**，故本条不勾选。
 - [ ] **MAIL-IMAP-006（P1/MH+SEC）**：为不支持 OAuth 的账号提供明确风险提示、最小权限应用密码、轮换和一键撤销。
 - [ ] **MAIL-SMTP-001（P1/MH）**：在 M9 后实现 SMTP draft/send adapter，支持 Message-ID/References/In-Reply-To 和 Provider 对账。
 - [ ] **MAIL-SMTP-002（P1/MH+SEC）**：实施 envelope recipient/header recipient 一致性、TLS、大小限制、域风险和防开放中继测试。
+   **2026-08-19 线上夹具建成（本地，未触达真实服务商）**：`packages/mailhub/scripts/smtp_wire_conformance.py`
+   驱动**真实** `ImapSmtpConnector.send()` 打到本地**隐式 TLS** 抓包服务器——connector 用 `smtplib.SMTP_SSL`
+   且强校验证书，明文测试服务器无法覆盖真实代码路径，故自签证书经 `SSL_CERT_FILE` 受信。**7/7 用例通过**，
+   证据 `docs/reports/mailhub-smtp-wire-conformance-2026-08-19.json`（离线 `--validate` + 14 项测试）。
+   线上验证：信封发件人=认证账号（无法伪造发件人 → 不能把 MailHub 当开放中继）· 信封收件人=To∪Cc∪Bcc ·
+   **`Bcc` 不落传输头** · `Message-ID` 与回执一致 · 回复头 `In-Reply-To`/`References` 正确 ·
+   **正文/主题夹带地址进不了信封** · 发送关闭与缺凭据 fail-closed。
+   **实测发现：connector 内无报文大小上限（1.5MB 正文被接受，wire 1,558,720 字节）**；真实 163 自发自收
+   + 增量回读的端到端一致性与四眼审批生产语义仍开放，故本条不勾选。
 - [ ] **MAIL-CONN-001（P1/MH）**：发布第三方 Connector SDK、capability descriptor 和 conformance certification。
   已提供 Python/TypeScript source SDK、`ProviderCapabilities`、纯函数 conformance kit、Host adapter guide 和 Sandbox-only certification tests；第三方发布包、真实 Provider certification evidence 与版本兼容表仍开放。
 - [x] **MAIL-CONN-002（P2/MH）**：支持 EML/MBOX 只读导入作为迁移/测试入口，不将其宣称为实时邮箱连接。

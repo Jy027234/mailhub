@@ -1,0 +1,91 @@
+{
+  "capabilities": [
+    "AUTH=LOGIN",
+    "AUTH=PLAIN",
+    "AUTH=XOAUTH2",
+    "CHILDREN",
+    "ID",
+    "IDLE",
+    "IMAP4",
+    "IMAP4REV1",
+    "MOVE",
+    "NAMESPACE",
+    "SASL-IR",
+    "UIDPLUS",
+    "XAPPLEPUSHSERVICE",
+    "XLIST"
+  ],
+  "exists_stable_across_sessions": true,
+  "features": {
+    "auth_login": true,
+    "auth_plain": true,
+    "auth_xoauth2": true,
+    "condstore": false,
+    "enable": false,
+    "idle": true,
+    "literal_plus": false,
+    "move": true,
+    "namespace": true,
+    "quota": false,
+    "special_use": false,
+    "starttls": false,
+    "uidplus": true,
+    "unselect": false,
+    "utf8_accept": false
+  },
+  "folders": {
+    "folder_count": 7,
+    "folder_name_digests": [
+      "16d70c1cea1f",
+      "54bd2d26eea8",
+      "7e08c9f84479",
+      "82cd6e8b9ff6",
+      "83ecb521bf32",
+      "f0d8a88c5911",
+      "f592e6a4db3c"
+    ],
+    "folder_names_truncated": false,
+    "hierarchy_delimiter": "/",
+    "inbox_present": true
+  },
+  "host": "imap.qq.com",
+  "inbox": {
+    "mailbox": "INBOX",
+    "max_uid": 326,
+    "messages": 324,
+    "search_delta": 0,
+    "search_visibility_limited": false,
+    "uid_search_count": 324,
+    "uidnext": 327,
+    "uidvalidity": 1789113608,
+    "unseen": 17
+  },
+  "label": "qq-mail",
+  "metadata_fetch": {
+    "fetched": 5,
+    "internal_date_samples": 5,
+    "requested": 5
+  },
+  "observed_at": "2026-09-11T08:00:09.247664+00:00",
+  "peer_verified": true,
+  "port": 993,
+  "read_only_guard": {
+    "body_fetched": false,
+    "copy_or_move_issued": false,
+    "expunge_issued": false,
+    "flags_modified": false,
+    "selected_readonly": true,
+    "store_issued": false
+  },
+  "schema": "mailhub.imap_server_matrix_evidence.v1",
+  "second_session": {
+    "exists": 324,
+    "uid_search_count": 324,
+    "uidnext": 327,
+    "uidvalidity": 1789113608
+  },
+  "tls_cipher": "TLS_AES_256_GCM_SHA384",
+  "tls_version": "TLSv1.3",
+  "uid_search_stable_across_sessions": true,
+  "uidvalidity_stable_across_sessions": true
+}

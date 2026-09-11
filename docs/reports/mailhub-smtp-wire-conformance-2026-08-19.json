@@ -1,0 +1,103 @@
+{
+  "authenticated_logins": [
+    "mailhub-sender@example.test"
+  ],
+  "cases": [
+    {
+      "checks": {
+        "envelope_recipients_equal_requested": true,
+        "envelope_sender_is_authenticated_account": true,
+        "message_id_matches_receipt": true,
+        "to_header_present": true
+      },
+      "detail": "",
+      "envelope": {
+        "mail_from": "mailhub-sender@example.test",
+        "rcpt_tos": [
+          "recipient-to@example.test"
+        ]
+      },
+      "name": "happy_path",
+      "passed": true
+    },
+    {
+      "checks": {
+        "bcc_never_transmitted": true,
+        "cc_header_present": true,
+        "envelope_covers_to_cc_bcc": true
+      },
+      "detail": "",
+      "envelope": {
+        "mail_from": "mailhub-sender@example.test",
+        "rcpt_tos": [
+          "recipient-to@example.test",
+          "recipient-bcc@example.test",
+          "recipient-cc@example.test"
+        ]
+      },
+      "name": "cc_and_bcc",
+      "passed": true
+    },
+    {
+      "checks": {
+        "in_reply_to_present": true,
+        "references_present": true
+      },
+      "detail": "",
+      "name": "reply_headers",
+      "passed": true
+    },
+    {
+      "checks": {
+        "envelope_recipients_equal_requested": true,
+        "smuggled_address_absent_from_envelope": true
+      },
+      "detail": "",
+      "envelope": {
+        "mail_from": "mailhub-sender@example.test",
+        "rcpt_tos": [
+          "recipient-to@example.test"
+        ]
+      },
+      "name": "audience_injection_blocked",
+      "passed": true
+    },
+    {
+      "checks": {
+        "raised_smtp_send_capability_disabled": true
+      },
+      "detail": "smtp_send_capability_disabled",
+      "name": "send_disabled_refused",
+      "passed": true
+    },
+    {
+      "checks": {
+        "raised_smtp_password_required": true
+      },
+      "detail": "smtp_password_required",
+      "name": "missing_password_refused",
+      "passed": true
+    },
+    {
+      "checks": {
+        "connector_size_cap_enforced": false
+      },
+      "detail": "body_bytes=1500000 accepted=True wire_bytes=1558720",
+      "name": "size_behaviour_measured",
+      "passed": true
+    }
+  ],
+  "certificate": "self_signed_localhost_trusted_via_SSL_CERT_FILE",
+  "connector": "mailhub.connectors.imap_smtp.ImapSmtpConnector",
+  "findings": [
+    "connector enforces no message size cap: a 1500000-byte body was accepted (MAIL-SMTP-002 open item)"
+  ],
+  "implicit_tls": true,
+  "observed_at": "2026-09-11T08:01:08.537997+00:00",
+  "schema": "mailhub.smtp_wire_conformance.v1",
+  "summary": {
+    "passed": 7,
+    "total": 7
+  },
+  "tls_version": "TLSv1.3"
+}
