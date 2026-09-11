@@ -1539,7 +1539,22 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    （迁移 0022 + down 脚本），排队时记录批准者；发信前再校验携带该持久化身份并置 `revalidation=True`，
    宿主据此重新断言职责分离，而不是「确认已消费」就放行——「不知道谁批的」不再等于通过。端口与 HTTP
    适配器增加显式 `revalidation` 标志（此前靠是否传审批人隐式区分，再校验也要带身份后无法表达）。
-   仍在开放：`OUTCOME_UNKNOWN` 真实对账。
+   **2026-09-11 剩余项已定性并定方案（`OUTCOME_UNKNOWN` 真实对账）**：现状 `reconcile_outcome_unknown`
+   （`service.py:2971`）是**手工**入口——由操作者填入结论状态与 ref，系统本身并不会判断邮件到底发出去没有。
+   状态机已具备（`OUTCOME_UNKNOWN → RECONCILED_SUCCEEDED / RETRY_WAIT / MANUAL_RESOLUTION`，`domain.py:1149-1170`），
+   缺的是「自动判定」。
+   关键有利条件：连接器发送时用的是**确定性 Message-ID**——`message["Message-ID"] = f"<mailhub-{request.operation_id}@mailhub.invalid>"`
+   （`connectors/imap_smtp.py:291`，并作为 `provider_message_ref` 返回，`:307`），故对账所需的 Message-ID 可由
+   `operation_id` 直接推导，**无需新增持久化**。
+   方案：(a) 新增宿主端口 `OutboundReconciliationPort.observe_outbound(tenant_id, subject_id, connection_id,
+   internet_message_id)`，返回三态 `found: True / False / None`，`None` = 无法判定，**fail-closed**：探测不可用一律
+   保持 `OUTCOME_UNKNOWN`，绝不放行成「已发送」；(b) 服务端自动对账：仅受理处于 `OUTCOME_UNKNOWN` 的操作 → 推导
+   Message-ID → 询问端口 → `found=True` 记 `RECONCILED_SUCCEEDED`（带 ref），`found=False` 记 `RETRY_WAIT`（带
+   `next_attempt_at`，重复投递风险由确定性 Message-ID 兜底可检出），`None` 不改状态并记审计；(c) 参考宿主以 imaplib 在
+   INBOX 按 `HEADER Message-ID` 实现该端口；(d) 受控证据：扩展 `smtp_wire_conformance.py` 的本地抓包服务器——
+   一种情形**收下 DATA 后断连**（连接器抛 `OutcomeUnknown`，消息实际已投递），另一种**DATA 完成前断连**（未投递），
+   再把已投递的那封经本地 Dovecot 暴露，用同一套对账代码分别验证 `found=True→RECONCILED_SUCCEEDED` 与
+   `found=False→RETRY_WAIT`，以及端口异常时保持 `OUTCOME_UNKNOWN`。全程不触达真实服务商。
 
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；
