@@ -1499,8 +1499,13 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    若将来需要覆盖 Exchange 协议行为与该路径的 XOAUTH2，可另立 `exchange_online` 行（M365 真实邮箱），
    它**不等于**本行。故本条保持未勾选。
 - [ ] **MAIL-IMAP-006（P1/MH+SEC）**：为不支持 OAuth 的账号提供明确风险提示、最小权限应用密码、轮换和一键撤销。
-- [ ] **MAIL-SMTP-001（P1/MH）**：在 M9 后实现 SMTP draft/send adapter，支持 Message-ID/References/In-Reply-To 和 Provider 对账。
-- [ ] **MAIL-SMTP-002（P1/MH+SEC）**：实施 envelope recipient/header recipient 一致性、TLS、大小限制、域风险和防开放中继测试。
+- [x] **MAIL-SMTP-001（P1/MH）**：在 M9 后实现 SMTP draft/send adapter，支持 Message-ID/References/In-Reply-To 和 Provider 对账。
+  **2026-09-11 收口**：确定性 Message-ID（`outbound_internet_message_id`）、参照/回复头、大小上限在建连前强制、
+  以及 `OUTCOME_UNKNOWN` 的**自动** Provider 对账（三态端口 + 受控端到端证据，见下）均已落地并验证。
+- [x] **MAIL-SMTP-002（P1/MH+SEC）**：实施 envelope recipient/header recipient 一致性、TLS、大小限制、域风险和防开放中继测试。
+  **2026-09-11 收口**：本地隐式 TLS 线上夹具 7/7（信封发件人＝认证账号故不构成开放中继、信封收件人＝To∪Cc∪Bcc、
+  Bcc 不落传输头、正文夹带地址进不了信封、超限不发字节、关闭/缺凭据 fail-closed）+ 四眼审批生产语义
+  （自批与匿名批准拒绝、确认一次性、审批人身份持久化并在发信前**重新断言**）+ `OUTCOME_UNKNOWN` 自动对账。
    **2026-08-19 线上夹具建成（本地，未触达真实服务商）**：`packages/mailhub/scripts/smtp_wire_conformance.py`
    驱动**真实** `ImapSmtpConnector.send()` 打到本地**隐式 TLS** 抓包服务器——connector 用 `smtplib.SMTP_SSL`
    且强校验证书，明文测试服务器无法覆盖真实代码路径，故自签证书经 `SSL_CERT_FILE` 受信。**7/7 用例通过**，
@@ -1561,9 +1566,22 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    （**故意不进生产必需清单**，未配置＝保持未决，属 fail-closed 默认）；8 项测试，其中 3 项在把「无法判定」并入「不存在」时
    会失败（已实测）。`dbcfb78` 落地宿主侧 `local_host/outbound.py` + 路由 `POST /v1/mail-host/outbound/observe`：
    仅当**所有**配置文件夹都成功搜过才回 `found=False`，任一文件夹打不开/连不上即回 `found=None`；8 项测试。
-   **(d) 受控端到端证据仍待做**：扩展 `smtp_wire_conformance.py` 抓包服务器制造「收下 DATA 后断连」与「DATA 完成前断连」两种
-   情形，再用本地 Dovecot 暴露已投递的那封，跑通 `found=True→RECONCILED_SUCCEEDED` / `found=False→RETRY_WAIT` / 端口异常→保持
-   `OUTCOME_UNKNOWN` 三条路径并产出 JSON 证据。
+   **(d) 受控端到端证据已完成（2026-09-11）**：新增 Blocal-host/scripts/outcome_unknown_reconciliation.py`——自建**原始 TLS SMTP 对端**，
+   两种模式精确制造未知结果：`after_data`（收下整封 DATA 后直接断连，消息**确实已被接受**）与 `at_data`（读到 DATA` 命令即断连，
+   消息**从未被接受**）。三情形实测（真实连接器 + 真实对账服务 + 真实宿主观测，全程不触达服务商）：
+
+   | 情形 | 连接器 | 对端是否收下 | 宿主观测 | 最终状态 |
+   | --- | --- | --- | --- | --- |
+   | delivered | `smtp_outcome_unknown` | 是（已 APPEND 进真实 Dovecot） | `True` | **reconciled_succeeded** |
+   | absent | `smtp_outcome_unknown` | 否 | `False` | **retry_wait** |
+   | indeterminate | `smtp_outcome_unknown` | 是 | `None`（邮箱不可达） | **outcome_unknown（不改状态）** |
+
+   证据 `docs/reports/mailhub-outcome-unknown-reconciliation.json`（离线 `--validate` 通过，账号只存域名+摘要，已验证不含明文地址），
+   8 项证据契约测试（缺情形、连接器未报未知、观测不符、状态不符、delivered 未落箱、absent 却收下、探测被问两次均判失败）。
+   首轮运行时这 8 项契约**成功抓出了脚本自身的调用签名 bug**，未让错误结果冒充通过。
+
+   **本项结论**：MAIL-SMTP-001/002 原先开放的两点（四眼审批生产语义、`OUTCOME_UNKNOWN` 真实对账）均已完成并有
+   fail-closed 测试与受控实测；防开放中继由 `smtp_wire_conformance.py` 的「信封发件人＝认证账号」等 7/7 用例覆盖。
 
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；

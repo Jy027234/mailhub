@@ -1,0 +1,70 @@
+{
+  "schema": "mailhub.outcome_unknown_reconciliation.v1",
+  "recorded_at": "2026-09-11T19:25:28.606774+00:00",
+  "host": "127.0.0.1",
+  "port": 10993,
+  "folder": "INBOX",
+  "tls_trust": "private_ca",
+  "smtp_peer": "local_dropping_tls_capture",
+  "mailbox": "local_dovecot_fixture",
+  "account_domain": "example.test",
+  "account_digest": "5690e3071497",
+  "cases": [
+    {
+      "case": "delivered",
+      "smtp_mode": "after_data",
+      "connector_error": "smtp_outcome_unknown",
+      "message_id": "<mailhub-14aea9ce-0bcd-4dbc-bbf0-be4e5c28b658@mailhub.invalid>",
+      "peer_accepted_data": true,
+      "message_id_present_in_payload": true,
+      "append_status": "OK",
+      "probe_observations": [
+        {
+          "message_id": "<mailhub-14aea9ce-0bcd-4dbc-bbf0-be4e5c28b658@mailhub.invalid>",
+          "found": true,
+          "provider_message_ref": "<mailhub-14aea9ce-0bcd-4dbc-bbf0-be4e5c28b658@mailhub.invalid>",
+          "mailbox": "INBOX",
+          "detail": "uid 1"
+        }
+      ],
+      "final_status": "reconciled_succeeded"
+    },
+    {
+      "case": "absent",
+      "smtp_mode": "at_data",
+      "connector_error": "smtp_outcome_unknown",
+      "message_id": "<mailhub-f74f7c3b-b4ac-49f7-a695-09435c88521b@mailhub.invalid>",
+      "peer_accepted_data": false,
+      "message_id_present_in_payload": false,
+      "append_status": "",
+      "probe_observations": [
+        {
+          "message_id": "<mailhub-f74f7c3b-b4ac-49f7-a695-09435c88521b@mailhub.invalid>",
+          "found": false,
+          "mailbox": "INBOX",
+          "detail": "no match"
+        }
+      ],
+      "final_status": "retry_wait"
+    },
+    {
+      "case": "indeterminate",
+      "smtp_mode": "after_data",
+      "connector_error": "smtp_outcome_unknown",
+      "message_id": "<mailhub-d638b715-7c0d-4ad3-ba5c-a1a9acbb8db1@mailhub.invalid>",
+      "peer_accepted_data": true,
+      "message_id_present_in_payload": true,
+      "append_status": "",
+      "probe_observations": [
+        {
+          "message_id": "<mailhub-d638b715-7c0d-4ad3-ba5c-a1a9acbb8db1@mailhub.invalid>",
+          "found": null,
+          "detail": "ConnectionRefusedError"
+        }
+      ],
+      "final_status": "outcome_unknown"
+    }
+  ],
+  "issues": [],
+  "passed": true
+}

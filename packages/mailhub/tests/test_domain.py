@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -28,6 +29,7 @@ def _action(
     external: bool = False,
     large: bool = False,
     group: bool = False,
+    recipients: tuple[str, ...] = ("buyer@example.test",),
 ) -> AgentActionRequest:
     return AgentActionRequest(
         action_id=uuid4(),
@@ -38,7 +40,7 @@ def _action(
             connection_id=uuid4(),
             folder_ref="INBOX",
             thread_id=uuid4(),
-            recipient_addresses=("buyer@example.test",),
+            recipient_addresses=recipients,
             has_new_recipient=new_recipient,
             has_bcc=bcc,
             has_external_recipient=external,
@@ -86,6 +88,44 @@ def test_l3b_requires_grant_and_allows_existing_thread() -> None:
     assert decision.automation_level is AutomationLevel.L3B_BOUNDED_REPLY
 
 
+def _grant(policy: MailAgentPolicy) -> DelegationGrant:
+    return DelegationGrant(
+        grant_id=uuid4(),
+        tenant_id="tenant-1",
+        policy_id=policy.policy_id,
+        agent_subject_id="agent-1",
+        granted_by_subject_id="agent-1",
+        capability_ids=frozenset({ActionType.SEND_REPLY}),
+        granted_at=datetime.now(UTC) - timedelta(minutes=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+
+def test_a_recipient_outside_the_allowlist_is_refused() -> None:
+    """Domain risk: the policy allowlist is the boundary, not a hint.
+
+    Nothing asserted this before, so the refusal could have been deleted without
+    a single test noticing.
+    """
+
+    action = _action(recipients=("buyer@other.test",))
+    policy = _policy(action)
+
+    decision = evaluate_policy(policy, _grant(policy), action)
+
+    assert decision.allowed is False
+    assert decision.reason_code == "recipient_domain_not_allowed"
+
+
+def test_a_recipient_inside_the_allowlist_is_not_refused_for_its_domain() -> None:
+    action = _action(recipients=("buyer@example.test",))
+    policy = _policy(action)
+
+    decision = evaluate_policy(policy, _grant(policy), action)
+
+    assert decision.reason_code != "recipient_domain_not_allowed"
+
+
 def test_new_recipient_is_never_autonomous() -> None:
     action = _action(new_recipient=True)
     policy = _policy(action)
@@ -113,7 +153,7 @@ def test_new_recipient_is_never_autonomous() -> None:
         {"group": True},
     ),
 )
-def test_reply_risk_flags_require_approval(kwargs: dict[str, bool]) -> None:
+def test_reply_risk_flags_require_approval(kwargs: dict[str, Any]) -> None:
     action = _action(**kwargs)
     policy = _policy(action)
     grant = DelegationGrant(
