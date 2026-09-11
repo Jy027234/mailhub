@@ -1527,7 +1527,22 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    迁移窗口回滚到 0016（账本与 0020 的 `cc_addresses` 同步消失）后再升级复原。
    本次还修掉一个**会导致误判的缺陷**：账本存的是文件名词干，按字符串比较会把 `0016_x > 0016`，
    从而把回滚目标自身排除在期望集合外——已改为按数字前缀比较并加回归测试。
-   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。真实故障注入仍开放。
+   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。
+   **2026-09-11 真实故障注入已闭环，MAIL-ADOPT-009 四项本地演练全部完成**：新增
+   `packages/mailhub/scripts/fault_drill.py`，在真实 PostgreSQL 与真实仓储上注入四类故障，**13/13 通过**：
+
+   | 场景 | 注入方式 | 失败被暴露 | 是否留下残迹 |
+   | --- | --- | --- | --- |
+   | 进程 | 对持有未提交事务的后端执行 `pg_terminate_backend` | 是（`InternalClientError`） | **无**（0 → 0 行） |
+   | 网络 | `docker pause` 暂停数据库 | 是（`TimeoutError`） | **无**（0 → 0 行），且解除后连接池自愈 |
+   | 存储 | `default_transaction_read_only=on` | 是（`DBAPIError`） | **无**（0 → 1，只有恢复后那笔落盘） |
+   | 崩溃 | worker 取租约后消失 | 是（下一次取租约被 `operation_outcome_unknown_reconciliation_required` 挡下） | 状态转为 `outcome_unknown`、租约被清空 |
+
+   只断言"抛了异常"是不够的——那样即使留下半行数据也会通过，所以每个场景都同时断言**没有残迹**。
+   证据 `docs/reports/mailhub-fault-drill.json`（离线 `--validate` + 10 项契约测试，其中一条专门保证
+   "某场景其实没注入成功"必须判失败）。至此 `MAIL-ADOPT-009` 的本地部分：**备份/恢复、PITR/WAL、备库切换、
+   容量基线、真实故障注入**五项均有可离线复核的证据。生产环境专属的部分（跨机房、真实磁盘故障、托管数据库）
+   仍不在本仓库可覆盖范围内。
    **2026-09-11 容量压测已闭环**：新增 `packages/mailhub/scripts/capacity_drill.py`——不是拿玩具表跑分，而是驱动
    **真实 `SqlAlchemyMailRepository`** 打在迁移后的真实 schema 上（22 个迁移全应用），因此被测的是写路径、
    读路径、每事务的 RLS 上下文设置，以及让重放同步安全的那个唯一索引。工作负载 40 线程 × 25 封 = **1000 条**、
