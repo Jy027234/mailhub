@@ -1,4 +1,9 @@
 {
+  "auth_features": {
+    "auth_login": true,
+    "auth_plain": true,
+    "auth_xoauth2": true
+  },
   "capabilities": [
     "CHILDREN",
     "COMPRESS=DEFLATE",
@@ -8,6 +13,22 @@
     "IMAP4REV1",
     "MOVE",
     "NAMESPACE",
+    "UIDPLUS",
+    "XAPPLEPUSHSERVICE",
+    "XLIST"
+  ],
+  "capabilities_unauthenticated": [
+    "AUTH=LOGIN",
+    "AUTH=PLAIN",
+    "AUTH=XOAUTH2",
+    "CHILDREN",
+    "ID",
+    "IDLE",
+    "IMAP4",
+    "IMAP4REV1",
+    "MOVE",
+    "NAMESPACE",
+    "SASL-IR",
     "UIDPLUS",
     "XAPPLEPUSHSERVICE",
     "XLIST"
@@ -64,7 +85,7 @@
     "internal_date_samples": 5,
     "requested": 5
   },
-  "observed_at": "2026-09-11T14:55:56.236844+00:00",
+  "observed_at": "2026-09-11T18:34:37.577672+00:00",
   "peer_verified": true,
   "port": 993,
   "read_only_guard": {

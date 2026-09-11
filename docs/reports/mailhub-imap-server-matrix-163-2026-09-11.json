@@ -1,4 +1,9 @@
 {
+  "auth_features": {
+    "auth_login": false,
+    "auth_plain": true,
+    "auth_xoauth2": false
+  },
   "capabilities": [
     "COMPRESS=DEFLATE",
     "ID",
@@ -7,6 +12,15 @@
     "SPECIAL-USE",
     "STARTTLS",
     "UIDPLUS",
+    "XAPPLEPUSHSERVICE",
+    "XLIST"
+  ],
+  "capabilities_unauthenticated": [
+    "AUTH=PLAIN",
+    "COMPRESS=DEFLATE",
+    "ID",
+    "IMAP4REV1",
+    "SPECIAL-USE",
     "XAPPLEPUSHSERVICE",
     "XLIST"
   ],
@@ -62,7 +76,7 @@
     "internal_date_samples": 5,
     "requested": 5
   },
-  "observed_at": "2026-09-11T14:55:50.260639+00:00",
+  "observed_at": "2026-09-11T18:34:32.556243+00:00",
   "peer_verified": true,
   "port": 993,
   "read_only_guard": {

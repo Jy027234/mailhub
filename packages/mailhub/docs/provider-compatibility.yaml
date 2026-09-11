@@ -66,7 +66,14 @@ providers:
     domestic_evidence: 网易企业邮箱 imap.qiye.163.com:993 真实只读切片（backfill 50 / 增量 0 重复 / 45 线程 / 50 分析 / 1 知识候选）+ smtp.qiye.163.com:465 受控发送闭环；属本地单用户证据，不替代服务器矩阵 / SMTP 对账。
     server_matrix:
       verified: [163_qiye_enterprise, qq_mail, dovecot_2_4_local]
-      still_open: [self_hosted_exchange]
+      still_open: []
+      blocked_by_environment:
+        self_hosted_exchange:
+          reason: 无法在受控环境复现
+          detail: Exchange Server 没有官方或社区容器镜像，也不是可容器化的形态（Windows Server 服务器角色 + 必须先有 AD DS 林/域 + 宿主级前置组件 + 数十 GB ISO + 主机名/域绑定），因此本地 Docker 无法提供该行；唯一路径是真实 Windows Server 虚拟机或客户现场 Exchange。
+          decided: 2026-09-11（所有者决定：记录原因，暂不投入工程；待有客户实际使用 Exchange 时再评估）
+          not_a_substitute: 用 Dovecot 等替身冒充 Exchange 行属测试替身充当证据，明确不做
+          alternative_if_needed: Exchange Online（M365）真实邮箱可覆盖 Exchange 协议行为与 XOAUTH2 路径，但应单列 exchange_online 行，不等于 self_hosted_exchange
       probe: scripts/imap_server_matrix_probe.py
       local_fixture: scripts/local_dovecot_fixture.py
       evidence: ../../docs/reports/mailhub-imap-server-matrix-2026-09-11.md
@@ -80,13 +87,18 @@ providers:
         move: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: true}
         namespace: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: true}
         quota: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
-        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
+        auth_plain: {163_qiye_enterprise: true, qq_mail: true, dovecot_2_4_local: true}
+        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
         hierarchy_delimiter: {163_qiye_enterprise: "/", qq_mail: "/", dovecot_2_4_local: "."}
-        capability_counts: {163_qiye_enterprise: 9, qq_mail: 11, dovecot_2_4_local: 41}
+        capability_counts_authenticated: {163_qiye_enterprise: 9, qq_mail: 11, dovecot_2_4_local: 41}
+        capability_counts_pre_auth: {163_qiye_enterprise: 7, qq_mail: 14, dovecot_2_4_local: 8}
       capability_read_contract:
-        note: 认证前的能力列表被服务端刻意收窄；imaplib 的 client.capabilities 不保证在登录后刷新
-        rule: 能力判定只接受认证后显式 CAPABILITY 的结果，且证据必须记录读取时机
-        superseded_claim: 2026-08-19 版"Dovecot 实现 UIDPLUS/CONDSTORE 却不广告"系采集缺陷造成的假象，已推翻
+        note: 两份列表回答不同问题——**认证后**列表决定邮箱行为（IDLE/CONDSTORE/UIDPLUS/MOVE/NAMESPACE 等只在认证后出现），**认证前**列表才是认证机制的唯一来源（RFC 3501 允许服务端在认证后移除 AUTH=*，矩阵中三台都移除了）
+        mailbox_capabilities_source: authenticated_explicit_CAPABILITY
+        auth_mechanisms_source: pre_auth_capabilities
+        evidence_fields: [capabilities, capabilities_unauthenticated, features, auth_features]
+        imaplib_pitfall: client.capabilities 不保证在登录后刷新（Dovecot 2.4 在 tagged login 响应里重申能力集，imaplib 未取用）
+        superseded_claim: 2026-08-19 版三行记录的 7/14/8 与今天的**认证前**列表 7/14/8 完全吻合，证实旧证据录的是认证前能力集；其**邮箱能力**结论（Dovecot 无 CONDSTORE/UIDPLUS/MOVE/NAMESPACE、163 无 IDLE/UIDPLUS）为假象，已推翻；其**认证机制**结论（163 仅 AUTH=PLAIN、QQ 支持 XOAUTH2）当时就是正确的，予以保留
       search_visibility_findings:
         note: 163 的 UID SEARCH ALL 只覆盖部分邮件，SEARCH 结果数不能代表邮箱真实规模
         exists_vs_search: {163_qiye_enterprise: "1634/182", qq_mail: "535/535", dovecot_2_4_local: "1/1"}
@@ -128,22 +140,23 @@ providers:
         non_retryable: true
       observed_163_qiye_enterprise:
         tls: TLSv1.3
-        auth: [AUTH=PLAIN]
+        auth_mechanisms_pre_auth: [AUTH=PLAIN]
         uidvalidity: 1
         uidnext_invariant_holds: true
-        exists_matches_uid_search: true
-        idle: false
+        exists_matches_uid_search: false
+        search_visibility_limited: true
+        idle: true
         condstore: false
-        uidplus: false
+        uidplus: true
         move: false
         namespace: false
         quota: false
         status_field_order_guaranteed: false
-        poll_is_the_only_supported_path: true
+        poll_is_the_primary_supported_path: true
     restrictions:
-      - poll_is_the_only_path_on_163_idle_absent
-      - modseq_cursor_unavailable_on_both_verified_servers
+      - poll_remains_the_primary_path_even_where_idle_is_advertised
+      - modseq_cursor_unavailable_on_both_provider_hosted_servers
+      - search_results_do_not_represent_mailbox_size_on_163
       - smtp_002_reconciliation_and_four_eyes_production_semantics_still_open
-      - uidplus_absent_no_uid_expunge_on_163
-      - self_hosted_exchange_row_still_open
+      - self_hosted_exchange_row_blocked_by_environment
       - smtp_send_disabled_by_default

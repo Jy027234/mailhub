@@ -1,4 +1,9 @@
 {
+  "auth_features": {
+    "auth_login": false,
+    "auth_plain": true,
+    "auth_xoauth2": false
+  },
   "capabilities": [
     "BINARY",
     "CATENATE",
@@ -42,6 +47,16 @@
     "URL-PARTIAL",
     "WITHIN"
   ],
+  "capabilities_unauthenticated": [
+    "AUTH=PLAIN",
+    "ENABLE",
+    "ID",
+    "IDLE",
+    "IMAP4REV1",
+    "LITERAL+",
+    "LOGIN-REFERRALS",
+    "SASL-IR"
+  ],
   "certificate_trust": "custom_ca",
   "exists_stable_across_sessions": true,
   "features": {
@@ -79,7 +94,7 @@
     "search_visibility_limited": false,
     "uid_search_count": 1,
     "uidnext": 2,
-    "uidvalidity": 1789138475,
+    "uidvalidity": 1789151678,
     "unseen": 1
   },
   "label": "dovecot_2_4_local",
@@ -88,7 +103,7 @@
     "internal_date_samples": 1,
     "requested": 1
   },
-  "observed_at": "2026-09-11T14:55:35.599851+00:00",
+  "observed_at": "2026-09-11T18:34:43.629658+00:00",
   "peer_verified": true,
   "port": 10993,
   "read_only_guard": {
@@ -104,7 +119,7 @@
     "exists": 1,
     "uid_search_count": 1,
     "uidnext": 2,
-    "uidvalidity": 1789138475
+    "uidvalidity": 1789151678
   },
   "tls_cipher": "TLS_AES_256_GCM_SHA384",
   "tls_version": "TLSv1.3",

@@ -232,6 +232,12 @@ def validate_bundle(bundle: Mapping[str, Any]) -> list[str]:
     capabilities = bundle.get("capabilities")
     if not isinstance(capabilities, list) or not capabilities:
         issues.append("capabilities_missing")
+    pre_auth = bundle.get("capabilities_unauthenticated")
+    if pre_auth is not None and not isinstance(pre_auth, list):
+        issues.append("capabilities_unauthenticated_invalid")
+    auth_features = bundle.get("auth_features")
+    if auth_features is not None and not isinstance(auth_features, dict):
+        issues.append("auth_features_invalid")
     guard = bundle.get(READ_ONLY_GUARD_KEY)
     if not isinstance(guard, Mapping):
         issues.append("read_only_guard_missing")
@@ -413,7 +419,16 @@ def probe(
                     fetched += 1
 
         folders = _folder_facts(client, folder_limit)
+        # Auth mechanisms live in the *pre-auth* list: RFC 3501 lets a server
+        # drop them once the session is authenticated, and every server in the
+        # matrix does.  Deriving the auth flags from the authenticated list
+        # would report "no AUTH=PLAIN" for a server that just logged us in.
         read_only = feature_flags(capabilities)
+        auth_features = {
+            name: value
+            for name, value in feature_flags(list(authenticated) + list(unauthenticated)).items()
+            if name.startswith("auth_")
+        }
         guard = {
             "store_issued": False,
             "expunge_issued": False,
@@ -435,7 +450,12 @@ def probe(
             # operator-supplied CA validated the server certificate.
             "certificate_trust": "custom_ca" if ca_file is not None else "system_store",
             "capabilities": capabilities,
+            # Kept separately because the two lists answer different questions:
+            # authenticated capabilities govern mailbox behaviour, pre-auth
+            # capabilities govern which authentication mechanisms exist.
+            "capabilities_unauthenticated": unauthenticated,
             "features": read_only,
+            "auth_features": auth_features,
             "inbox": {
                 "mailbox": mailbox,
                 "uidvalidity": uidvalidity,
@@ -567,6 +587,7 @@ def main() -> int:
     print(f"server        : {bundle['host']}:{bundle['port']} ({bundle['label']})")
     print(f"tls           : {bundle['tls_version']} {bundle['tls_cipher']}")
     print(f"capabilities  : {len(bundle['capabilities'])}")
+    print(f"pre-auth caps : {len(bundle.get('capabilities_unauthenticated') or [])}")
     features = bundle["features"]
     active = sorted(name for name, enabled in features.items() if enabled)
     print("features      : " + ", ".join(active))

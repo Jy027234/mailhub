@@ -1491,7 +1491,13 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    `scripts/imap_condstore_live_probe.py` 对真实 Dovecot 验证 8/8（游标 `1789138475:1:2`）。
    保留发现：层级分隔符 163/QQ 为 `/`、Dovecot 为 `.`，不可写死；163 的 `STATUS` 不按请求顺序返回
    字段，必须按名解析（采集器已修复并加不变量交叉校验）。
-   自建 Exchange 一行**仍开放**，故本条不勾选。
+   **2026-09-11 自建 Exchange 一行判定为环境阻塞**（`blocked_by_environment`）：Exchange Server 没有官方或
+   社区容器镜像，也不是可容器化的形态——它是 Windows Server 上的服务器角色，必须先有 AD DS 林/域，
+   还要宿主级前置组件与数十 GB 的 ISO，并强绑定主机名与域；**本地 Docker 无法提供这一行**，唯一路径是
+   真实 Windows Server 虚拟机或客户现场 Exchange。所有者决定：记录原因、暂不投入工程，待有客户实际使用
+   Exchange 时再评估。**明确不做**：用 Dovecot 等替身冒充 Exchange 行——那是测试替身充当证据。
+   若将来需要覆盖 Exchange 协议行为与该路径的 XOAUTH2，可另立 `exchange_online` 行（M365 真实邮箱），
+   它**不等于**本行。故本条保持未勾选。
 - [ ] **MAIL-IMAP-006（P1/MH+SEC）**：为不支持 OAuth 的账号提供明确风险提示、最小权限应用密码、轮换和一键撤销。
 - [ ] **MAIL-SMTP-001（P1/MH）**：在 M9 后实现 SMTP draft/send adapter，支持 Message-ID/References/In-Reply-To 和 Provider 对账。
 - [ ] **MAIL-SMTP-002（P1/MH+SEC）**：实施 envelope recipient/header recipient 一致性、TLS、大小限制、域风险和防开放中继测试。

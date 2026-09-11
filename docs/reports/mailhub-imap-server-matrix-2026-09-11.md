@@ -21,8 +21,21 @@ imaplib 没有取用，于是**认证前**那份刻意收窄的列表被当成�
 | 认证后 `client.capabilities` | 8 | 同上（未刷新） |
 | 认证后**显式** `CAPABILITY` | **41** | 含 `CONDSTORE、QRESYNC、UIDPLUS、MOVE、NAMESPACE、IDLE、SPECIAL-USE、ESEARCH、SORT、THREAD=*` … |
 
-因此"服务端不广告某能力"这类结论**必须注明读取时机与读取方式**。采集器已改为认证后显式发起
-`CAPABILITY`（`authenticated_capabilities`），旧的三份 JSON 与旧报告已作废删除。
+**根因的决定性证据**：旧三行记录的能力数是 7 / 14 / 8，而今天测得的**认证前**列表恰好也是
+7 / 14 / 8（163 / QQ / Dovecot）——逐行完全吻合，证实旧证据录的就是认证前列表。
+
+**但旧证据并非全错，这一点很重要**：认证机制本来就只在认证前广告，所以旧版的
+"163 仅 ` AUTH=PLAIN `、QQ 支持 ` AUTH=XOAUTH2 `"**当时就是正确的**，予以保留；被推翻的只有
+**邮箱能力**部分（Dovecot 的 CONDSTORE/UIDPLUS/MOVE/NAMESPACE、163 的 IDLE/UIDPLUS）。
+两份列表回答的是不同问题，证据必须同时留存：
+
+| 问题 | 唯一可靠来源 | 本次实测 |
+| --- | --- | --- |
+| 服务端支持哪些**认证机制** | **认证前**列表（RFC 3501 允许认证后移除 ` AUTH=* `，矩阵中三台都移除了） | 163 = 7 项含 ` AUTH=PLAIN `；QQ = 14 项含 ` AUTH=LOGIN/PLAIN/XOAUTH2 `；Dovecot = 8 项含 ` AUTH=PLAIN ` |
+| 服务端支持哪些**邮箱能力** | **认证后**显式 ` CAPABILITY ` | 163 = 9；QQ = 11；Dovecot = 41 |
+
+采集器现在同时写入 ` capabilities `（认证后）、` capabilities_unauthenticated `（认证前）、
+` features `（邮箱能力）与 ` auth_features `（认证机制）四个字段，旧的三份 JSON 与旧报告已作废删除。
 
 ## 1. 被测服务器
 
@@ -47,10 +60,12 @@ body_fetched / flags_modified` 必须全为 `false`，`selected_readonly` 必须
 | `MOVE` | ❌ | ✅ | ✅ | 163 无 MOVE，移动语义不可通用 |
 | `NAMESPACE` | ❌ | ✅ | ✅ | 163 前缀需按分隔符推断 |
 | `QUOTA` | ❌ | ❌ | ❌ | 三家都读不到配额 |
-| `AUTH=XOAUTH2` | ❌ | ❌ | ❌ | 国内两家都只保证 `AUTH=PLAIN` |
+| `AUTH=PLAIN`（认证前） | ✅ | ✅ | ✅ | 三家都支持；见 §0 的来源说明 |
+| `AUTH=XOAUTH2`（认证前） | ❌ | ✅ | ❌ | 仅 QQ 支持；163 只保证 `AUTH=PLAIN` |
 | `LITERAL+` | ❌ | ❌ | ✅ | — |
 | `SPECIAL-USE / XLIST` | ✅ / ✅ | ❌ / ✅ | ✅ / ❌ | 文件夹特殊用途标记方式三家不同 |
-| `能力数量` | **9** | **11** | **41** | 旧版记为 7 / 14 / 8，均已作废 |
+| 邮箱能力数量（认证后） | **9** | **11** | **41** | 旧版三项即认证前列表，已作废 |
+| 认证前能力数量 | 7 | 14 | 8 | 与旧版记录逐行吻合，见 §0 |
 
 ## 3. 真实发现
 
@@ -96,7 +111,7 @@ EXISTS/UIDNEXT 交叉校验**，不能用 SEARCH 结果数量代表邮箱真实�
 
 | 项 | 163 | QQ | Dovecot |
 | --- | --- | --- | --- |
-| `UIDVALIDITY` | `1` | `1789113608` | `1789138475` |
+| `UIDVALIDITY` | `1` | `1789113608` | `1789151678`（容器重建后） |
 | `UIDNEXT` | `1730701468` | `589` | `2` |
 | 最大 UID | `1730701467` | `588` | `1` |
 | 不变量 `UIDNEXT = max UID + 1` | ✅ | ✅ | ✅ |
@@ -117,9 +132,15 @@ Dovecot 行由夹具 `APPEND ` 一封邮件后采集，使 SEARCH/FETCH 路径�
 | 网易企业邮箱 | ✅ 已实测（2026-09-11 复测） |
 | QQ 邮箱 | ✅ 已实测（2026-09-11 复测） |
 | 标准 Dovecot（2.4.5 夹具） | ✅ 已实测（2026-09-11 复测） |
-| 自建 Exchange / 其他 | ⬜ **开放** |
+| 自建 Exchange | ⛔ **环境阻塞**（`blocked_by_environment`，2026-09-11 决定） |
 
-> 三行实测**不等于**矩阵完成（Exchange 行缺）；`MAIL-IMAP-005` 保持未勾选。
+> 三行实测**不等于**矩阵完成；`MAIL-IMAP-005` 保持未勾选。
+>
+> **Exchange 行为何不是"开放"而是"环境阻塞"**：Exchange Server 没有官方或社区容器镜像，也不是可容器化的
+> 形态——它是 Windows Server 上的服务器角色，必须先有 AD DS 林/域，还要宿主级前置组件与数十 GB 的 ISO，
+> 并强绑定主机名与域。因此本地 Docker 无法提供这一行；唯一路径是真实 Windows Server 虚拟机或客户现场 Exchange，
+> 属所有者决定暂不投入的工程。**明确不做**：用 Dovecot 等替身冒充 Exchange 行——那是测试替身充当证据。
+> 若将来需要覆盖 Exchange 协议行为，可另立 `exchange_online` 行（M365 真实邮箱 + XOAUTH2），它**不等于**本行。
 > 采集器可复用：`python scripts/imap_server_matrix_probe.py --env-file <env> --label <name> --json <out>`
 
 ## 6. 对产品的结论

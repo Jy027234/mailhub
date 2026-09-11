@@ -1,7 +1,7 @@
 {
   "kind": "mailhub.imap.condstore_live_probe",
   "label": "dovecot_2_4_local",
-  "recorded_at": "2026-09-11T14:54:36.327739+00:00",
+  "recorded_at": "2026-09-11T18:34:43.451470+00:00",
   "host": "127.0.0.1",
   "port": 10993,
   "folder": "INBOX",
@@ -90,10 +90,10 @@
     "NOTIFY",
     "LITERAL+"
   ],
-  "append_status": "OK [APPENDUID 1789138475 1] Append completed (0.089 + 0.001 + 0.085 secs).",
+  "append_status": "OK [APPENDUID 1789151678 1] Append completed (0.042 + 0.001 + 0.041 secs).",
   "highest_modseq": "2",
-  "first_cursor": "1789138475:1:2",
-  "second_cursor": "1789138475:1:2",
+  "first_cursor": "1789151678:1:2",
+  "second_cursor": "1789151678:1:2",
   "checks": [
     {
       "name": "capability_retrieved",
@@ -108,7 +108,7 @@
     {
       "name": "probe_message_appended",
       "ok": true,
-      "detail": "OK [APPENDUID 1789138475 1] Append completed (0.089 + 0.001 + 0.085 secs)."
+      "detail": "OK [APPENDUID 1789151678 1] Append completed (0.042 + 0.001 + 0.041 secs)."
     },
     {
       "name": "enable_advertised",
@@ -123,17 +123,17 @@
     {
       "name": "connector_cursor_carries_modseq",
       "ok": true,
-      "detail": "1789138475:1:2"
+      "detail": "1789151678:1:2"
     },
     {
       "name": "connector_modseq_search_accepted",
       "ok": true,
-      "detail": "1789138475:1:2"
+      "detail": "1789151678:1:2"
     },
     {
       "name": "modseq_never_regresses",
       "ok": true,
-      "detail": "1789138475:1:2 -> 1789138475:1:2"
+      "detail": "1789151678:1:2 -> 1789151678:1:2"
     }
   ],
   "failures": [],
