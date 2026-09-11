@@ -1,0 +1,91 @@
+{
+  "schema": "mailhub.capacity_drill.v1",
+  "recorded_at": "2026-09-11T19:43:06.369580+00:00",
+  "image": "postgres:16.4-alpine",
+  "workload": {
+    "threads": 40,
+    "messages": 1000,
+    "concurrency": 8,
+    "read_iterations": 60,
+    "read_limit": 50
+  },
+  "thresholds": {
+    "min_ingest_per_second": 50.0,
+    "max_p95_milliseconds": 250.0
+  },
+  "measured": {
+    "threads": 40,
+    "messages": 1000,
+    "elapsed_seconds": 2.844,
+    "ingest_per_second": 351.6,
+    "write_latency_ms": {
+      "p50": 19.388,
+      "p95": 27.865,
+      "p99": 35.016
+    },
+    "errors": [],
+    "read_latency_ms": {
+      "p50": 7.378,
+      "p95": 10.263,
+      "p99": 10.904
+    },
+    "thread_read_latency_ms": {
+      "p50": 4.907,
+      "p95": 5.884,
+      "p99": 6.229
+    },
+    "listed_per_read": 50,
+    "foreign_tenant_rows": 0,
+    "reingest_created_a_new_row": false,
+    "rows_stored": 1000
+  },
+  "checks": [
+    {
+      "name": "container_ready",
+      "ok": true,
+      "detail": "postgres:16.4-alpine"
+    },
+    {
+      "name": "schema_migrated",
+      "ok": true,
+      "detail": "applied:0001,0002,0003,0004,0005,0006,0007,0008,0009,0010,0011,0012,0013,0014,0015,0016,0017,0018,0019,0020,0021,0022"
+    },
+    {
+      "name": "no_write_errors_under_concurrency",
+      "ok": true,
+      "detail": "0 errors: "
+    },
+    {
+      "name": "ingest_rate_meets_the_recorded_floor",
+      "ok": true,
+      "detail": "351.6 msg/s (floor 50.0)"
+    },
+    {
+      "name": "read_p95_within_the_recorded_ceiling",
+      "ok": true,
+      "detail": "p95 10.263 ms (ceiling 250.0)"
+    },
+    {
+      "name": "reads_return_the_configured_page",
+      "ok": true,
+      "detail": "listed 50 of limit 50"
+    },
+    {
+      "name": "reingesting_the_same_message_does_not_duplicate",
+      "ok": true,
+      "detail": "created=False"
+    },
+    {
+      "name": "another_tenant_sees_nothing",
+      "ok": true,
+      "detail": "0 rows visible to the other tenant"
+    },
+    {
+      "name": "every_seeded_message_is_stored",
+      "ok": true,
+      "detail": "1000 rows stored, expected 1000"
+    }
+  ],
+  "failures": [],
+  "passed": true
+}

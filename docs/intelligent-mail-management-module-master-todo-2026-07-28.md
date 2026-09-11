@@ -1527,7 +1527,17 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    迁移窗口回滚到 0016（账本与 0020 的 `cc_addresses` 同步消失）后再升级复原。
    本次还修掉一个**会导致误判的缺陷**：账本存的是文件名词干，按字符串比较会把 `0016_x > 0016`，
    从而把回滚目标自身排除在期望集合外——已改为按数字前缀比较并加回归测试。
-   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。容量压测与真实故障注入仍开放。
+   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。真实故障注入仍开放。
+   **2026-09-11 容量压测已闭环**：新增 `packages/mailhub/scripts/capacity_drill.py`——不是拿玩具表跑分，而是驱动
+   **真实 `SqlAlchemyMailRepository`** 打在迁移后的真实 schema 上（22 个迁移全应用），因此被测的是写路径、
+   读路径、每事务的 RLS 上下文设置，以及让重放同步安全的那个唯一索引。工作负载 40 线程 × 25 封 = **1000 条**、
+   并发 8、读迭代 60 次。**9/9 通过**，实测：**351.6 msg/s** 写入（下限 50）、读 **p95 10.3 ms**（上限 250）、
+   并发下 0 写入错误、重放同一封 `created=False`、另一租户可见 **0** 行、库内实计数 **1000/1000**。
+   阈值刻意定得很低——这份证据的价值是**记录基线 + 不变量**，不是跑分：丢行、串租户、重放重复，再快也判失败。
+   证据 `docs/reports/mailhub-capacity-drill.json`（离线 `--validate` + 10 项契约测试）。
+   本轮还修掉了自己写的一条**同义反复检查**：`every_seeded_message_is_reachable` 当时断言的是
+   `expected == THREADS*MESSAGES_PER_THREAD`，根本没查库；已改为对 `mail_messages` 真实 `count(*)`，
+   并把 `rows_stored` 纳入必测字段。
    **2026-09-11 备库切换已闭环**：新增 `packages/mailhub/scripts/failover_drill.py`，真实流复制 + 真实切换，**14/14 通过**——
    建复制槽 → `pg_basebackup -Fp -Xs -R -S` 到独立备库容器 → 备库 `pg_is_in_recovery()=t` →
    主库 `pg_stat_replication.state=streaming` → 主库写入**实时到达备库** → **`docker kill` 主库容器**（不是重启）→
