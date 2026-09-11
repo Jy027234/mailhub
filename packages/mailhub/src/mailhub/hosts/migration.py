@@ -8,6 +8,7 @@ its own business state machine and rollback authority.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -259,6 +260,59 @@ class MigrationAuditEvent:
         }
 
 
+#: MailHub provider cursors are ``uidvalidity:uid`` or ``uidvalidity:uid:modseq``.
+#: Translating a legacy cursor into this shape is the host's job; the kit only
+#: checks that what it is handed is usable, never that it is correct.
+_CURSOR_RE = re.compile(r"^[0-9]{1,20}:[0-9]{1,20}(:[0-9]{1,20})?$")
+
+
+class CursorSlot(Protocol):
+    """The slice of the repository a cursor takeover needs."""
+
+    async def get_cursor(
+        self, *, tenant_id: str, connection_id: UUID, folder_ref: str
+    ) -> str | None: ...
+
+    async def commit_cursor(
+        self,
+        *,
+        tenant_id: str,
+        connection_id: UUID,
+        folder_ref: str,
+        expected_cursor: str | None,
+        next_cursor: str | None,
+    ) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class CursorTakeover:
+    """Evidence that a legacy position became MailHub's starting position.
+
+    Both cursors are kept.  The legacy one is what the old module reported, the
+    adopted one is what MailHub will resume from; keeping only the second would
+    make it impossible to audit the translation after the fact.
+    """
+
+    batch_id: UUID
+    tenant_id: str
+    connection_id: UUID
+    folder_ref: str
+    legacy_cursor: str
+    adopted_cursor: str
+    occurred_at: datetime
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "batch_id": str(self.batch_id),
+            "tenant_id": self.tenant_id,
+            "connection_id": str(self.connection_id),
+            "folder_ref": self.folder_ref,
+            "legacy_cursor": self.legacy_cursor,
+            "adopted_cursor": self.adopted_cursor,
+            "occurred_at": self.occurred_at.astimezone(UTC).isoformat(),
+        }
+
+
 class MigrationController:
     """Small host-side state machine; production interlock is DB-backed."""
 
@@ -365,16 +419,109 @@ class MigrationController:
         return claimed
 
     async def release_send_authority(self, *, batch_id: UUID) -> None:
+        """Keep the older name working; the rollback path is one code path."""
+
+        await self.rollback(batch_id=batch_id, reason="sender_authority_released")
+
+    async def take_over_cursor(
+        self,
+        *,
+        batch_id: UUID,
+        cursors: CursorSlot,
+        connection_id: UUID,
+        folder_ref: str,
+        legacy_cursor: str,
+        adopted_cursor: str,
+    ) -> CursorTakeover:
+        """Adopt the legacy sync position so MailHub resumes where it left off.
+
+        The compare-and-set is the guard rather than a check-then-write: a
+        cursor that already exists means MailHub has synced this folder, and
+        overwriting it would replay or skip mail instead of migrating anything.
+        A refusal is recorded as well as raised, because "the takeover did not
+        happen" is exactly the fact an operator needs afterwards.
+        """
+
+        batch = self._batch(batch_id)
+        _migration_text(folder_ref, "folder_ref", 512)
+        _migration_text(legacy_cursor, "legacy_cursor", 512)
+        if batch.state in {"send_claimed", "rolled_back"}:
+            raise ValueError("migration_cursor_takeover_not_allowed")
+        if not _CURSOR_RE.fullmatch(adopted_cursor):
+            raise ValueError("migration_adopted_cursor_invalid")
+        taken_at = datetime.now(UTC)
+        try:
+            await cursors.commit_cursor(
+                tenant_id=batch.tenant_id,
+                connection_id=connection_id,
+                folder_ref=folder_ref,
+                expected_cursor=None,
+                next_cursor=adopted_cursor,
+            )
+        except Exception as exc:
+            self.events.append(
+                MigrationAuditEvent(
+                    event_type="mail.migration.cursor_takeover_refused",
+                    batch_id=batch.batch_id,
+                    tenant_id=batch.tenant_id,
+                    account_ref=batch.account_ref,
+                    purpose=batch.purpose,
+                    owner=batch.owner,
+                    phase=batch.flags.phase,
+                    occurred_at=taken_at,
+                    reason=type(exc).__name__,
+                )
+            )
+            raise
+        self.batches[batch_id] = replace(batch, state="read_authority")
+        self.events.append(
+            MigrationAuditEvent(
+                event_type="mail.migration.cursor_taken_over",
+                batch_id=batch.batch_id,
+                tenant_id=batch.tenant_id,
+                account_ref=batch.account_ref,
+                purpose=batch.purpose,
+                owner=batch.owner,
+                phase=MigrationPhase.MAILHUB_READ_AUTHORITY,
+                occurred_at=taken_at,
+                reason="legacy_cursor_adopted",
+            )
+        )
+        return CursorTakeover(
+            batch_id=batch.batch_id,
+            tenant_id=batch.tenant_id,
+            connection_id=connection_id,
+            folder_ref=folder_ref,
+            legacy_cursor=legacy_cursor,
+            adopted_cursor=adopted_cursor,
+            occurred_at=taken_at,
+        )
+
+    async def rollback(self, *, batch_id: UUID, reason: str) -> MigrationBatch:
+        """Return the account to the legacy system, recording why.
+
+        Idempotent on purpose: a rollback is what an operator reaches for when
+        something is already wrong, and failing because it was attempted twice
+        would be the wrong answer.
+        """
+
+        _migration_text(reason, "reason", 300)
         batch = self._batch(batch_id)
         if batch.state == "rolled_back":
-            return
-        await self.interlock.release(
-            tenant_id=batch.tenant_id,
-            account_ref=batch.account_ref,
-            owner=batch.owner,
-            purpose=batch.purpose,
-        )
-        self.batches[batch_id] = replace(batch, state="rolled_back")
+            return batch
+        # Only release a lease this batch actually holds.  Rolling back a
+        # migration that never reached send authority is normal -- it is what
+        # happens when the read side is abandoned -- and asking the interlock to
+        # release a lease owned by nobody would raise instead of undoing.
+        if batch.state == "send_claimed":
+            await self.interlock.release(
+                tenant_id=batch.tenant_id,
+                account_ref=batch.account_ref,
+                owner=batch.owner,
+                purpose=batch.purpose,
+            )
+        rolled_back = replace(batch, state="rolled_back")
+        self.batches[batch_id] = rolled_back
         self.events.append(
             MigrationAuditEvent(
                 event_type="mail.migration.rollback_completed",
@@ -385,9 +532,10 @@ class MigrationController:
                 owner=batch.owner,
                 phase=batch.flags.phase,
                 occurred_at=datetime.now(UTC),
-                reason="sender_authority_released",
+                reason=reason,
             )
         )
+        return rolled_back
 
     def _batch(self, batch_id: UUID) -> MigrationBatch:
         batch = self.batches.get(batch_id)

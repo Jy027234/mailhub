@@ -105,7 +105,7 @@
 
 | ID | 现状 | 缺口 | 验收条件 |
 | --- | --- | --- | --- |
-| `MAIL-ADOPT-011` | AeroLink/CAACTRAINING 适配器为按宿主定制的参考 | 通用迁移工具包：shadow-read 比对器、cursor 接管、sender interlock、回滚脚本 | 在第二个不同栈的旧邮件模块上完成 shadow→cutover→回滚演练 |
+| `MAIL-ADOPT-011` | AeroLink/CAACTRAINING 适配器为按宿主定制的参考。**2026-09-11 工具包补全**：原有 `compare_shadow`（shadow-read 比对）、`SenderInterlockPort`/`NoDualSenderInterlock` 与 DB 版互锁已存在，**缺的是「cursor 接管」与「回滚入口」**——`compare_shadow` 只比较 `cursor_match`，没有任何地方把旧模块的同步位置采纳为 MailHub 的起点。本次新增：① `MigrationController.take_over_cursor(...)`，用真实仓储的**比较并设置**（`expected_cursor=None`）作为守卫——已存在游标即拒绝，因为覆盖正在运行的游标会造成重放或漏信；拒绝同时**记审计**（`cursor_takeover_refused`），因为「接管没发生」正是事后最需要的事实；返回的 `CursorTakeover` 同时保留**旧游标与采用游标**，使格式翻译事后可审计；采用游标按 MailHub 的 `uidvalidity:uid[:modseq]` 形状校验，非法值在**触碰仓储之前**即拒绝。② `MigrationController.rollback(batch_id, reason)`，幂等且记录原因；`release_send_authority` 改为委托同一条路径（行为不变）。**顺带修掉一个真实缺陷**：从未取得发送权的迁移（即只走到读权威就放弃）**无法回滚**——释放互锁会抛 `sender_interlock_owner_mismatch`，因为没人持有该租约；现在只释放确实持有的租约。6 项测试覆盖采纳/拒绝/非法游标/阶段守卫/回滚幂等/旧入口兼容 | 剩余：**在第二个不同栈的旧邮件模块上做完整 shadow→cutover→回滚演练**（需真实采用方或一个明确标注为夹具的旧模块） | 在第二个不同栈的旧邮件模块上完成 shadow→cutover→回滚演练 |
 | `MAIL-MIG-001/003/005`、`MAIL-AERO-*`、`MAIL-CAA-*` | 固定快照、source ledger、clean-room projection、迁移映射 | 真实 secret 迁移、shadow-read、single-read/single-send、rollback | 许可与数据分类签字 + 差异报告 + 切换证据 |
 
 ## 4. 优先级与最小可被引入集
