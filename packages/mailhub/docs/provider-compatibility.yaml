@@ -62,28 +62,38 @@ providers:
     status: real_mailbox_partial
     connector: mailhub.connectors.imap_smtp.ImapSmtpConnector
     capabilities: [tls, application_password_auth, uidvalidity_cursor, optional_modseq_cursor, smtp_outbox]
-    evidence: [tests/test_connectors.py, local-host/scripts/b4_imap.py, local-host/scripts/b4_send.py, scripts/imap_server_matrix_probe.py, ../../docs/reports/mailhub-imap-server-matrix-2026-08-19.md]
+    evidence: [tests/test_connectors.py, local-host/scripts/b4_imap.py, local-host/scripts/b4_send.py, scripts/imap_server_matrix_probe.py, ../../docs/reports/mailhub-imap-server-matrix-2026-09-11.md]
     domestic_evidence: 网易企业邮箱 imap.qiye.163.com:993 真实只读切片（backfill 50 / 增量 0 重复 / 45 线程 / 50 分析 / 1 知识候选）+ smtp.qiye.163.com:465 受控发送闭环；属本地单用户证据，不替代服务器矩阵 / SMTP 对账。
     server_matrix:
       verified: [163_qiye_enterprise, qq_mail, dovecot_2_4_local]
       still_open: [self_hosted_exchange]
       probe: scripts/imap_server_matrix_probe.py
       local_fixture: scripts/local_dovecot_fixture.py
-      evidence: ../../docs/reports/mailhub-imap-server-matrix-2026-08-19.md
+      evidence: ../../docs/reports/mailhub-imap-server-matrix-2026-09-11.md
       capability_divergence:
-        note: 能力必须按服务器协商，任何写死都会在真实服务器上说谎
-        idle: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: true}
-        condstore: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
+        note: 能力必须按服务器协商，任何写死都会在真实服务器上说谎；且只能在**认证后显式 CAPABILITY** 读取（见 capability_read_contract）
+        read_via_authenticated_CAPABILITY_command: true
+        idle: {163_qiye_enterprise: true, qq_mail: true, dovecot_2_4_local: true}
+        condstore: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: true}
         enable: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: true}
-        uidplus: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
-        move: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
-        namespace: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
+        uidplus: {163_qiye_enterprise: true, qq_mail: true, dovecot_2_4_local: true}
+        move: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: true}
+        namespace: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: true}
         quota: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
-        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
+        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
         hierarchy_delimiter: {163_qiye_enterprise: "/", qq_mail: "/", dovecot_2_4_local: "."}
-      capability_token_findings:
-        - dovecot_implements_uidplus_without_advertising_the_token
-        - dovecot_exposes_condstore_through_ENABLE_which_a_literal_token_check_misses
+        capability_counts: {163_qiye_enterprise: 9, qq_mail: 11, dovecot_2_4_local: 41}
+      capability_read_contract:
+        note: 认证前的能力列表被服务端刻意收窄；imaplib 的 client.capabilities 不保证在登录后刷新
+        rule: 能力判定只接受认证后显式 CAPABILITY 的结果，且证据必须记录读取时机
+        superseded_claim: 2026-08-19 版"Dovecot 实现 UIDPLUS/CONDSTORE 却不广告"系采集缺陷造成的假象，已推翻
+      search_visibility_findings:
+        note: 163 的 UID SEARCH ALL 只覆盖部分邮件，SEARCH 结果数不能代表邮箱真实规模
+        exists_vs_search: {163_qiye_enterprise: "1634/182", qq_mail: "535/535", dovecot_2_4_local: "1/1"}
+        rule: 增量同步必须同时读 UID 游标与 EXISTS/UIDNEXT 并交叉校验
+      connector_findings:
+        - condstore_must_be_negotiated_before_select_for_HIGHESTMODSEQ_to_appear
+        - enable_only_servers_are_defensive_not_observed
         - hierarchy_delimiter_differs_per_server_never_assume_slash
     smtp_wire_evidence:
       harness: scripts/smtp_wire_conformance.py

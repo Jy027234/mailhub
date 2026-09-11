@@ -1,3 +1,5 @@
+import asyncio
+import imaplib
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -1190,3 +1192,148 @@ def test_http_provider_message_preserves_cc_bcc_and_reply_headers() -> None:
     assert message["Bcc"] == "bcc@example.test"
     assert message["In-Reply-To"] == "<message-1@example.test>"
     assert message["References"] == "<message-1@example.test>"
+
+
+class FakeImapSession:
+    """imaplib stand-in that records the command order of one session.
+
+    Only the surface ImapSmtpConnector actually touches is implemented; the
+    point of the fake is to observe *when* CONDSTORE is negotiated and which
+    search key the connector then chooses.
+    """
+
+    def __init__(self, capabilities: tuple[bytes, ...], *, enable_ok: bool = True) -> None:
+        self.capabilities = capabilities
+        self.enable_ok = enable_ok
+        self.commands: list[str] = []
+        self.condstore_in_effect = False
+        self.search_arguments: tuple[str, ...] = ()
+        FakeImapSession.instances.append(self)
+
+    instances: list["FakeImapSession"] = []
+
+    def login(self, user: str, password: str) -> tuple[str, list[bytes]]:
+        del user, password
+        self.commands.append("LOGIN")
+        return ("OK", [b"logged in"])
+
+    def capability(self) -> tuple[str, list[bytes]]:
+        self.commands.append("CAPABILITY")
+        return ("OK", [b" ".join(self.capabilities)])
+
+    def enable(self, name: str) -> tuple[str, list[bytes]]:
+        self.commands.append("ENABLE " + name)
+        if not self.enable_ok:
+            raise imaplib.IMAP4.error("ENABLE rejected")
+        self.condstore_in_effect = True
+        return ("OK", [name.encode("ascii")])
+
+    def select(self, mailbox: str, readonly: bool = False) -> tuple[str, list[bytes]]:
+        del mailbox, readonly
+        self.commands.append("SELECT")
+        return ("OK", [b"0"])
+
+    def response(self, key: str) -> tuple[str, Any]:
+        self.commands.append("RESPONSE " + key)
+        if key == "UIDVALIDITY":
+            return ("UIDVALIDITY", [b"77"])
+        if self.condstore_in_effect or b"CONDSTORE" in self.capabilities:
+            return ("OK", [b"4242"])
+        return ("NO", [None])
+
+    def uid(self, command: str, *args: str) -> tuple[str, list[bytes]]:
+        self.commands.append("UID " + command + " " + " ".join(args))
+        if command == "search":
+            self.search_arguments = args
+        return ("OK", [b""])
+
+    def logout(self) -> tuple[str, list[bytes]]:
+        self.commands.append("LOGOUT")
+        return ("BYE", [b"bye"])
+
+
+def _sync_with_fake(
+    monkeypatch: pytest.MonkeyPatch,
+    capabilities: tuple[bytes, ...],
+    *,
+    enable_ok: bool = True,
+    cursor: str | None = None,
+) -> FakeImapSession:
+    FakeImapSession.instances = []
+
+    def factory(*args: object, **kwargs: object) -> FakeImapSession:
+        del args, kwargs
+        return FakeImapSession(capabilities, enable_ok=enable_ok)
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", factory)
+    connector = ImapSmtpConnector(imap_host="imap.example.test", smtp_host="smtp.example.test")
+    page = asyncio.run(
+        connector.sync(
+            _connection(ProviderName.IMAP_SMTP),
+            cursor=cursor,
+            limit=10,
+            credential={"username": "u", "password": "p"},
+        )
+    )
+    del page
+    return FakeImapSession.instances[0]
+
+
+def test_imap_enables_condstore_before_select_when_only_enable_is_advertised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server may require ENABLE before it honours MODSEQ.
+
+    No server in the compatibility matrix does this today, so the case is pinned
+    by a fake: a literal token check would fall back to UID-only pagination and
+    report nothing, which is the failure mode this branch exists to prevent.
+    """
+
+    session = _sync_with_fake(monkeypatch, (b"IMAP4rev1", b"ENABLE", b"IDLE"), cursor="77:5:1")
+
+    assert "ENABLE CONDSTORE" in session.commands
+    assert session.commands.index("ENABLE CONDSTORE") < session.commands.index("SELECT")
+    assert any(argument.startswith("MODSEQ") for argument in session.search_arguments)
+
+
+def test_imap_uses_modseq_when_condstore_is_advertised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _sync_with_fake(monkeypatch, (b"IMAP4rev1", b"CONDSTORE"), cursor="77:5:1")
+
+    # Already in effect for the session, so there is nothing to negotiate.
+    assert "ENABLE CONDSTORE" not in session.commands
+    assert any(argument.startswith("MODSEQ") for argument in session.search_arguments)
+
+
+def test_imap_treats_qresync_as_condstore(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RFC 7162 3.1.8: QRESYNC implies CONDSTORE."""
+
+    session = _sync_with_fake(monkeypatch, (b"IMAP4rev1", b"QRESYNC"), cursor="77:5:1")
+
+    assert "ENABLE CONDSTORE" not in session.commands
+    assert any(argument.startswith("MODSEQ") for argument in session.search_arguments)
+
+
+def test_imap_without_condstore_or_enable_falls_back_to_uid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _sync_with_fake(monkeypatch, (b"IMAP4rev1", b"IDLE"), cursor="77:5:1")
+
+    assert not any(command.startswith("ENABLE") for command in session.commands)
+    assert any(argument.startswith("UID 6:") for argument in session.search_arguments)
+    assert not any(argument.startswith("MODSEQ") for argument in session.search_arguments)
+
+
+def test_imap_fails_closed_when_enable_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = _sync_with_fake(
+        monkeypatch, (b"IMAP4rev1", b"ENABLE"), enable_ok=False, cursor="77:5:1"
+    )
+
+    assert "ENABLE CONDSTORE" in session.commands
+    assert not any(argument.startswith("MODSEQ") for argument in session.search_arguments)
+    assert any(argument.startswith("UID 6:") for argument in session.search_arguments)

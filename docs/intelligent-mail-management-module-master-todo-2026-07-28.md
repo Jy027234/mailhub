@@ -1473,26 +1473,24 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
 - [ ] **MAIL-IMAP-004（P0/MH）**：实现断线、并发连接限制、服务器不一致、部分 FETCH、超时和指数退避。
   已加入有界连接 semaphore、瞬时断线/部分 FETCH 重试、指数退避+jitter；真实服务器差异和长期运行演练仍开放。
 - [ ] **MAIL-IMAP-005（P1/MH）**：建立 QQ、163、标准 Dovecot 和自建 Exchange/其他服务器的真实兼容矩阵。
-   **2026-08-19 矩阵第 1 行实测（163 企业邮箱）**：只读探针 `packages/mailhub/scripts/imap_server_matrix_probe.py` +
-   证据 `docs/reports/mailhub-imap-server-matrix-163-2026-08-19.json` + 报告
-   `docs/reports/mailhub-imap-server-matrix-2026-08-19.md`。实测：TLSv1.3 / 仅 `AUTH=PLAIN` /
-   `UIDVALIDITY=1`、`UIDNEXT=max UID+1`、`EXISTS=UID SEARCH=178`、7 文件夹、分隔符 `/`、
-   元数据 FETCH 5/5、5 次独立会话完全一致。**关键缺失：无 `IDLE`、无 `CONDSTORE`、无 `UIDPLUS`、
-   无 `MOVE`、无 `NAMESPACE`/`QUOTA`、无 `AUTH=XOAUTH2`** → 受控 poll 为唯一路径，MODSEQ 游标不可用。
-   另发现该服务器 `STATUS` **不按请求顺序返回字段**，按位置解析会伪造游标重置（采集器已改为按字段名解析
-   并加不变量交叉校验）。
-   **2026-08-19 矩阵第 2 行实测（QQ 邮箱 imap.qq.com:993）**：14 项能力，**具备 `IDLE`、`MOVE`、`UIDPLUS`、
-   `NAMESPACE`、`AUTH=XOAUTH2`** —— 与 163 形成相反对比（163 这些全部缺失）；`UIDVALIDITY=1789113608`、
-   `UIDNEXT=max UID+1`、`EXISTS=UID SEARCH=324`、7 文件夹、分隔符 `/`、跨会话三项读数稳定。
-   **结论：能力必须按服务器协商——把 `IDLE`/`UIDPLUS`/`MOVE` 写死会在真实服务器上说谎。**
-   **2026-08-19 矩阵第 3 行实测（标准 Dovecot 2.4.5 本地夹具）**：新增
-   `packages/mailhub/scripts/local_dovecot_fixture.py`（私有 CA + Dovecot 2.4 配置 + Docker 启动命令），
-   探针新增 `--ca-file` 以支持私有 CA，并把信任锚（`custom_ca`/系统库）写入证据。
-   实测：TLSv1.3、8 项能力、`UIDVALIDITY=1789136049`、`UIDNEXT=max UID+1`、空邮箱与 `APPEND` 后
-   各采一次（1 封、`EXISTS=SEARCH=1`、元数据 FETCH 1/1）、跨会话稳定、分隔符 `.`。
-   **三个发现**：① Dovecot **实现了 UIDPLUS 却不广告令牌**（`APPEND` 返回 `[APPENDUID …]`）——
-   能力令牌不可作为唯一判据；② 广告 `ENABLE` 但不广告 `CONDSTORE`，而 `imap_smtp.py:206` 按字面令牌
-   判定 MODSEQ，**对 Dovecot 会漏判**（待改进项）；③ 层级分隔符是 `.` 而非 `/`，不可写死。
+   **2026-09-11 复测修订（推翻 2026-08-19 版的两条结论）**：只读探针
+   `packages/mailhub/scripts/imap_server_matrix_probe.py`（认证后显式 `CAPABILITY`、离线 `--validate`、
+   `--ca-file` 支持私有 CA、37 项测试）+ 报告 `docs/reports/mailhub-imap-server-matrix-2026-09-11.md`
+   + 三份 JSON 证据（163 / QQ / Dovecot，均为 2026-09-11）。旧版"Dovecot 实现了 UIDPLUS/CONDSTORE
+   却不广告"是**采集缺陷造成的假象**：旧采集器读 `client.capabilities`，而 imaplib 在登录后并未刷新它，
+   于是把认证前那份被服务端刻意收窄的 8 项列表当成了最终结果；同一会话内显式 `CAPABILITY` 返回
+   **41** 项（含 `CONDSTOREQRESYNC`/`UIDPLUS`/`MOVE`/`NAMESPACE`）。采集器已改为认证后显式
+   CAPABILITY 并加回归测试锁定。修正后的能力集：163 **9** 项（`IDLE`、`UIDPLUS` 实为支持，旧版记为缺失）、
+   QQ **11** 项（`AUTH=XOAUTH2` 实为不支持，旧版记为支持）、Dovecot **41** 项。
+   **新发现（影响同步设计）**：163 的 `UID SEARCH ALL` 只覆盖 1634 封中的 **182** 封
+   （证据位 `search_visibility_limited: true`），SEARCH 结果数不能代表邮箱真实规模，增量同步必须与
+   `EXISTS`/`UIDNEXT` 交叉校验。
+   连接器 `connectors/imap_smtp.py` 一直调用显式 `CAPABILITY`，**从未**因该假象降级；本次另补防御性
+   正确性：`ENABLE CONDSTORE` 必须在 `SELECT` **之前**协商（RFC 7162 §3.1.8，否则 `HIGHESTMODSEQ`
+   不出现在 SELECT 响应里，服务端即使支持也会退回 UID 游标），并新增
+   `scripts/imap_condstore_live_probe.py` 对真实 Dovecot 验证 8/8（游标 `1789138475:1:2`）。
+   保留发现：层级分隔符 163/QQ 为 `/`、Dovecot 为 `.`，不可写死；163 的 `STATUS` 不按请求顺序返回
+   字段，必须按名解析（采集器已修复并加不变量交叉校验）。
    自建 Exchange 一行**仍开放**，故本条不勾选。
 - [ ] **MAIL-IMAP-006（P1/MH+SEC）**：为不支持 OAuth 的账号提供明确风险提示、最小权限应用密码、轮换和一键撤销。
 - [ ] **MAIL-SMTP-001（P1/MH）**：在 M9 后实现 SMTP draft/send adapter，支持 Message-ID/References/In-Reply-To 和 Provider 对账。

@@ -198,12 +198,17 @@ class ImapSmtpConnector(ProviderConnector):
                 client.authenticate("XOAUTH2", lambda _: auth_string.encode("utf-8"))
             else:
                 client.login(username, password or "")
+            capability_names = _capability_names(client)
+            # CONDSTORE must be negotiated *before* SELECT: a server only adds
+            # HIGHESTMODSEQ to the SELECT response once the extension is in
+            # effect for the session, so negotiating afterwards would silently
+            # pin every sync to UID-only pagination.
+            condstore = _condstore_enabled(client, capability_names)
             status, select_data = client.select(active_filter.folder_ref, readonly=True)
             if status != "OK":
                 raise ProviderFailureError("imap_select_failed")
             uid_validity = _uid_validity(client, select_data)
-            capability_names = _capability_names(client)
-            highest_modseq = _highest_modseq(client) if "CONDSTORE" in capability_names else None
+            highest_modseq = _highest_modseq(client) if condstore else None
             saved_validity, last_uid, saved_modseq = _parse_cursor(cursor)
             if saved_validity is not None and saved_validity != uid_validity:
                 last_uid = None
@@ -494,6 +499,38 @@ def _capability_names(client: imaplib.IMAP4_SSL) -> frozenset[str]:
         if isinstance(item, bytes):
             values.update(token.decode("ascii", "ignore").upper() for token in item.split())
     return frozenset(values)
+
+
+def _condstore_enabled(client: imaplib.IMAP4_SSL, capability_names: frozenset[str]) -> bool:
+    """Decide whether MODSEQ criteria may be used on this session.
+
+    A server only honours the MODSEQ search key while CONDSTORE is in effect,
+    and sending it anyway would turn a sync into an error, so this fails closed.
+    Three advertised shapes matter in practice:
+
+    * CONDSTORE - in effect for the whole session (RFC 7162 3.1.3);
+    * QRESYNC - implies CONDSTORE (RFC 7162 3.1.8);
+    * ENABLE only - the server implements the extension but keeps it off until
+      asked.  No server in the compatibility matrix currently behaves this way,
+      so this branch is defensive: RFC 7162 lets a server require ENABLE, and a
+      literal token check would silently pin such a server to UID-only
+      pagination instead of reporting the loss.
+
+    Anything else, including a rejected ENABLE, reports no CONDSTORE.
+    """
+
+    if "CONDSTORE" in capability_names or "QRESYNC" in capability_names:
+        return True
+    if "ENABLE" not in capability_names:
+        return False
+    enable = getattr(client, "enable", None)
+    if enable is None:
+        return False
+    try:
+        status, _data = enable("CONDSTORE")
+    except (imaplib.IMAP4.error, OSError):
+        return False
+    return bool(status == "OK")
 
 
 def _highest_modseq(client: imaplib.IMAP4_SSL) -> int | None:

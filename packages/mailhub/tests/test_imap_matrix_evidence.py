@@ -9,6 +9,7 @@ leaky bundle fails validation.
 from __future__ import annotations
 
 import ast
+import imaplib
 import importlib.util
 import ssl
 from pathlib import Path
@@ -315,3 +316,56 @@ def test_probe_selects_every_mailbox_read_only() -> None:
         assert readonly, "client.select must pass readonly explicitly"
         value = readonly[0].value
         assert isinstance(value, ast.Constant) and value.value is True, "readonly must be True"
+
+
+class _CapabilitySession:
+    """Session whose post-login attribute disagrees with an explicit CAPABILITY."""
+
+    def __init__(self, attribute: tuple[bytes, ...], explicit: tuple[bytes, ...]) -> None:
+        self.capabilities = attribute
+        self._explicit = explicit
+        self.commands: list[str] = []
+
+    def capability(self) -> tuple[str, list[bytes]]:
+        self.commands.append("CAPABILITY")
+        return ("OK", [b" ".join(self._explicit)])
+
+
+def test_authenticated_capabilities_prefers_the_explicit_command() -> None:
+    """imaplib does not reliably refresh client.capabilities after login.
+
+    Dovecot 2.4 restates its capability set in the tagged login response and
+    imaplib keeps the narrow pre-auth list instead, which is how an earlier
+    revision of this probe recorded 8 capabilities for a server that advertises
+    41 and then reported CONDSTORE, UIDPLUS, MOVE and NAMESPACE as absent.
+    """
+
+    session = _CapabilitySession(
+        attribute=(b"IMAP4rev1", b"ENABLE"),
+        explicit=(b"IMAP4rev1", b"ENABLE", b"CONDSTORE", b"QRESYNC", b"UIDPLUS"),
+    )
+
+    assert PROBE.authenticated_capabilities(session) == [
+        "CONDSTORE",
+        "ENABLE",
+        "IMAP4REV1",
+        "QRESYNC",
+        "UIDPLUS",
+    ]
+    assert session.commands == ["CAPABILITY"]
+
+
+def test_authenticated_capabilities_fails_closed() -> None:
+    class Rejecting:
+        def capability(self) -> tuple[str, list[bytes]]:
+            raise imaplib.IMAP4.error("CAPABILITY refused")
+
+    assert PROBE.authenticated_capabilities(Rejecting()) == []
+
+
+def test_authenticated_capabilities_ignores_a_failed_status() -> None:
+    class Failing:
+        def capability(self) -> tuple[str, list[bytes]]:
+            return ("NO", [b"IMAP4rev1"])
+
+    assert PROBE.authenticated_capabilities(Failing()) == []

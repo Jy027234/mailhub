@@ -1,28 +1,31 @@
 {
   "capabilities": [
-    "AUTH=PLAIN",
     "COMPRESS=DEFLATE",
     "ID",
+    "IDLE",
     "IMAP4REV1",
     "SPECIAL-USE",
+    "STARTTLS",
+    "UIDPLUS",
     "XAPPLEPUSHSERVICE",
     "XLIST"
   ],
-  "exists_stable_across_sessions": true,
+  "certificate_trust": "system_store",
+  "exists_stable_across_sessions": false,
   "features": {
     "auth_login": false,
-    "auth_plain": true,
+    "auth_plain": false,
     "auth_xoauth2": false,
     "condstore": false,
     "enable": false,
-    "idle": false,
+    "idle": true,
     "literal_plus": false,
     "move": false,
     "namespace": false,
     "quota": false,
     "special_use": true,
-    "starttls": false,
-    "uidplus": false,
+    "starttls": true,
+    "uidplus": true,
     "unselect": false,
     "utf8_accept": false
   },
@@ -44,22 +47,22 @@
   "host": "imap.qiye.163.com",
   "inbox": {
     "mailbox": "INBOX",
-    "max_uid": 1730701460,
-    "messages": 178,
-    "search_delta": 0,
-    "search_visibility_limited": false,
-    "uid_search_count": 178,
-    "uidnext": 1730701461,
+    "max_uid": 1730701467,
+    "messages": 1634,
+    "search_delta": 1452,
+    "search_visibility_limited": true,
+    "uid_search_count": 182,
+    "uidnext": 1730701468,
     "uidvalidity": 1,
-    "unseen": 82
+    "unseen": 0
   },
-  "label": "163-qiye-enterprise",
+  "label": "163_qiye_enterprise",
   "metadata_fetch": {
     "fetched": 5,
     "internal_date_samples": 5,
     "requested": 5
   },
-  "observed_at": "2026-09-11T07:29:07.859579+00:00",
+  "observed_at": "2026-09-11T14:55:50.260639+00:00",
   "peer_verified": true,
   "port": 993,
   "read_only_guard": {
@@ -72,9 +75,9 @@
   },
   "schema": "mailhub.imap_server_matrix_evidence.v1",
   "second_session": {
-    "exists": 178,
-    "uid_search_count": 178,
-    "uidnext": 1730701461,
+    "exists": 182,
+    "uid_search_count": 182,
+    "uidnext": 1730701468,
     "uidvalidity": 1
   },
   "tls_cipher": "TLS_AES_256_GCM_SHA384",

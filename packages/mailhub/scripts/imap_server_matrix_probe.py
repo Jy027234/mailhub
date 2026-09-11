@@ -135,6 +135,27 @@ def resolve_settings(env_file: Path | None) -> dict[str, str]:
     return {"host": host, "username": username, "password": password, "port": port}
 
 
+def authenticated_capabilities(client: imaplib.IMAP4_SSL) -> list[str]:
+    """Ask the authenticated server for its capabilities explicitly.
+
+    The answer is authoritative: a server may advertise a much wider set after
+    login than before it, and RFC 3501 lets it do so by repeating CAPABILITY in
+    the login response, which imaplib does not always pick up.
+    """
+
+    try:
+        status, data = client.capability()
+    except (imaplib.IMAP4.error, OSError):
+        return []
+    if status != "OK" or not isinstance(data, (list, tuple)):
+        return []
+    flattened: list[bytes | str] = []
+    for item in data:
+        if isinstance(item, (bytes, str)):
+            flattened.extend(item.split())
+    return normalize_capabilities(flattened)
+
+
 def normalize_capabilities(raw: Sequence[bytes | str]) -> list[str]:
     tokens: set[str] = set()
     for entry in raw:
@@ -332,9 +353,18 @@ def probe(
     client = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
     try:
         tls = _tls_facts(client)
-        capabilities = normalize_capabilities(client.capabilities)
+        unauthenticated = normalize_capabilities(client.capabilities)
         client.login(username, password)
-        capabilities = normalize_capabilities(client.capabilities or capabilities)
+        # imaplib only refreshes client.capabilities when it happens to see an
+        # untagged CAPABILITY, so on a server that restates capabilities in the
+        # tagged login response it silently keeps the pre-auth list.  Dovecot
+        # 2.4 reports 8 tokens that way and 41 through an explicit CAPABILITY,
+        # which is how an earlier revision of this probe recorded CONDSTORE,
+        # QRESYNC, UIDPLUS and MOVE as absent on a server that implements them.
+        authenticated = authenticated_capabilities(client) or normalize_capabilities(
+            client.capabilities
+        )
+        capabilities = authenticated or unauthenticated
 
         status, selected = client.select(mailbox, readonly=True)
         if status != "OK":
