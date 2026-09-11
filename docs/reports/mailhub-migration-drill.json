@@ -1,0 +1,84 @@
+{
+  "schema": "mailhub.migration_drill.v1",
+  "recorded_at": "2026-09-11T19:51:36.715391+00:00",
+  "mailhub_repository": "postgresql (migrated schema)",
+  "legacy_module": "fixture (explicitly labelled, not a customer system)",
+  "legacy_stack": "sqlite, page-number cursors, own sender log",
+  "legacy_system": "fixture-legacy-mail",
+  "account_ref": "ops@example.test",
+  "checks": [
+    {
+      "name": "container_ready",
+      "ok": true,
+      "detail": "postgres:16.4-alpine"
+    },
+    {
+      "name": "schema_migrated",
+      "ok": true,
+      "detail": "applied:0001,0002,0003,0004,0005,0006,0007,0008,0009,0010,0011,0012,0013,0014,0015,0016,0017,0018,0019,0020,0021,0022"
+    },
+    {
+      "name": "shadow_comparison_is_authority_safe",
+      "ok": true,
+      "detail": "12 facts compared"
+    },
+    {
+      "name": "shadow_comparison_can_fail",
+      "ok": true,
+      "detail": "a changed digest is not authority safe"
+    },
+    {
+      "name": "every_legacy_message_reached_mailhub",
+      "ok": true,
+      "detail": "12 of 12"
+    },
+    {
+      "name": "cursor_taken_over_from_the_legacy_position",
+      "ok": true,
+      "detail": "legacy page:12 -> mailhub 1789113608:300"
+    },
+    {
+      "name": "a_second_takeover_is_refused",
+      "ok": true,
+      "detail": "cursor still 1789113608:300"
+    },
+    {
+      "name": "mailhub_claimed_send_authority",
+      "ok": true,
+      "detail": "the batch holds the lease"
+    },
+    {
+      "name": "legacy_sender_is_refused_during_cutover",
+      "ok": true,
+      "detail": "the legacy sender could not take the lease"
+    },
+    {
+      "name": "no_message_left_the_legacy_sender_during_cutover",
+      "ok": true,
+      "detail": "0 messages sent by the legacy side"
+    },
+    {
+      "name": "rollback_is_recorded",
+      "ok": true,
+      "detail": "state=rolled_back"
+    },
+    {
+      "name": "mailhub_cannot_send_after_rollback",
+      "ok": true,
+      "detail": "claiming authority on a rolled back batch is refused"
+    },
+    {
+      "name": "legacy_sender_works_again_after_rollback",
+      "ok": true,
+      "detail": "the lease is free again and a message went out"
+    },
+    {
+      "name": "rollback_does_not_silently_rewrite_the_cursor",
+      "ok": true,
+      "detail": "cursor left at 1789113608:300 for the operator to decide"
+    }
+  ],
+  "failures": [],
+  "passed": true,
+  "remaining": "a shadow -> cutover -> rollback drill on a real second product's mail module is the operator's step; this drill proves the kit, not a customer migration"
+}
