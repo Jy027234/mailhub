@@ -1,0 +1,66 @@
+{
+  "checks": {
+    "backup_created": true,
+    "baseline_has_full_chain": true,
+    "baseline_has_rls_tables": true,
+    "ledger_restored_exactly": true,
+    "migrations_applied": true,
+    "post_backup_row_absent_after_restore": true,
+    "post_backup_row_present_before_disaster": true,
+    "pre_backup_row_present": true,
+    "pre_backup_row_restored": true,
+    "restore_completed": true,
+    "reupgrade_completed": true,
+    "reupgrade_restored_later_ledger_rows": true,
+    "reupgrade_restored_later_schema": true,
+    "rls_flags_restored": true,
+    "rollback_completed": true,
+    "rollback_removed_later_ledger_rows": true,
+    "rollback_removed_later_schema": true,
+    "schema_destroyed": true,
+    "table_shape_restored": true
+  },
+  "metrics": {
+    "backup_bytes": 84947,
+    "baseline": {
+      "ledger_entries": 21,
+      "rls_enabled": 19,
+      "tables": 20
+    },
+    "ledger_after_rollback": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "restored": {
+      "ledger_entries": 21,
+      "rls_enabled": 19,
+      "tables": 20
+    },
+    "rto_seconds": 2.12
+  },
+  "observed_at": "2026-09-11T14:37:40.647262+00:00",
+  "passed": true,
+  "postgres_image": "postgres:16.4-alpine",
+  "rollback_target": "0016",
+  "rpo": {
+    "boundary": "the pg_dump instant",
+    "proved_by": "post_backup_row_absent_after_restore",
+    "seconds": 2.12
+  },
+  "rto_seconds": 2.12,
+  "schema": "mailhub.dr_drill.v1"
+}

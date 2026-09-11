@@ -1507,6 +1507,15 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    **实测发现的缺口已补**：新增 `max_send_bytes`（连接器默认 10 MiB、可经 `MAILHUB_SMTP_MAX_SEND_BYTES` 调整），
    在**建立 SMTP 连接之前**校验，超限抛不可重试的 `smtp_message_too_large`（重试永远失败的条件不该被重试）；
    夹具用例由"测量"改为"强制"并线上验证**超限时未发出任何字节**。
+   **2026-08-19 备份/恢复 + 迁移 N-1 演练（MAIL-ADOPT-009 本地部分）**：
+   `packages/mailhub/scripts/dr_drill.py` 在真实 PostgreSQL 16.4 容器上执行：基线（表数/RLS/账本）→
+   `pg_dump -Fc` 外部副本 → `DROP SCHEMA public CASCADE` → 恢复 → 逐项比对。**19/19 通过**，
+   **RTO 实测 2.1–6.5s**；**RPO 边界被证明**：备份后写入的行在恢复后必须消失；
+   迁移窗口回滚到 0016（账本与 0020 的 `cc_addresses` 同步消失）后再升级复原。
+   本次还修掉一个**会导致误判的缺陷**：账本存的是文件名词干，按字符串比较会把 `0016_x > 0016`，
+   从而把回滚目标自身排除在期望集合外——已改为按数字前缀比较并加回归测试。
+   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。PITR/WAL 归档、备库切换、容量压测与真实故障注入仍开放。
+
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；
    宿主库只存指针，口令在 Vault。真实 Vault dev 下 **15/15** 检查通过：库内无明文且扫描 WAL 伴随文件、
