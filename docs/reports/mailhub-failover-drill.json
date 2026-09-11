@@ -1,0 +1,84 @@
+{
+  "schema": "mailhub.failover_drill.v1",
+  "recorded_at": "2026-09-11T19:40:00.149106+00:00",
+  "image": "postgres:16.4-alpine",
+  "topology": "two containers on mailhub-failover-net",
+  "standby_dir": "/failover/standby",
+  "replication_slot": "mailhub_standby",
+  "timeline_before": "00000001",
+  "timeline_after": "00000002",
+  "checks": [
+    {
+      "name": "primary_ready",
+      "ok": true,
+      "detail": "postgres:16.4-alpine"
+    },
+    {
+      "name": "primary_accepts_replication",
+      "ok": true,
+      "detail": "wal_level=replica"
+    },
+    {
+      "name": "standby_base_backup_taken",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "standby_started",
+      "ok": true,
+      "detail": "standby accepts connections"
+    },
+    {
+      "name": "standby_is_in_recovery",
+      "ok": true,
+      "detail": "pg_is_in_recovery()=True"
+    },
+    {
+      "name": "primary_timeline_is_initial",
+      "ok": true,
+      "detail": "timeline 00000001"
+    },
+    {
+      "name": "walsender_reports_streaming",
+      "ok": true,
+      "detail": "state=streaming"
+    },
+    {
+      "name": "live_write_reached_the_standby",
+      "ok": true,
+      "detail": "replicated-live visible on the standby"
+    },
+    {
+      "name": "primary_killed",
+      "ok": true,
+      "detail": "primary no longer accepts connections"
+    },
+    {
+      "name": "standby_promote_issued",
+      "ok": true,
+      "detail": "waiting for server to promote.... done\nserver promoted"
+    },
+    {
+      "name": "promoted_node_accepts_writes",
+      "ok": true,
+      "detail": "pg_is_in_recovery()=f after promotion"
+    },
+    {
+      "name": "promotion_advanced_the_timeline",
+      "ok": true,
+      "detail": "timeline 00000001 -> 00000002"
+    },
+    {
+      "name": "no_data_lost_across_the_failover",
+      "ok": true,
+      "detail": "pre-failover rows: 1"
+    },
+    {
+      "name": "promoted_node_takes_new_writes",
+      "ok": true,
+      "detail": "post-failover rows: 1"
+    }
+  ],
+  "failures": [],
+  "passed": true
+}

@@ -1527,7 +1527,17 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    迁移窗口回滚到 0016（账本与 0020 的 `cc_addresses` 同步消失）后再升级复原。
    本次还修掉一个**会导致误判的缺陷**：账本存的是文件名词干，按字符串比较会把 `0016_x > 0016`，
    从而把回滚目标自身排除在期望集合外——已改为按数字前缀比较并加回归测试。
-   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。备库切换、容量压测与真实故障注入仍开放。
+   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。容量压测与真实故障注入仍开放。
+   **2026-09-11 备库切换已闭环**：新增 `packages/mailhub/scripts/failover_drill.py`，真实流复制 + 真实切换，**14/14 通过**——
+   建复制槽 → `pg_basebackup -Fp -Xs -R -S` 到独立备库容器 → 备库 `pg_is_in_recovery()=t` →
+   主库 `pg_stat_replication.state=streaming` → 主库写入**实时到达备库** → **`docker kill` 主库容器**（不是重启）→
+   备库 promote → `pg_is_in_recovery()=f` → **时间线 `00000001 -> 00000002`** → 切换前行仍在、切换后新写入落盘。
+   两个实测发现值得记下：① 官方镜像里 **postgres 就是容器 PID 1**，内核忽略发给 PID 1 的 SIGQUIT，
+   因此**同一容器内的集群根本杀不掉**（`pg_ctl -m immediate stop` 只会等到超时）——必须用两个容器，切换才是真的；
+   ② 时间线不能用 `pg_control_checkpoint()` 读，它给的是**最近一次 checkpoint** 的时间线，提升后一段时间仍返回 1，
+   会把成功的切换误判为失败（本次就是这样被抓出来的），改为读 `pg_walfile_name(pg_current_wal_lsn())` 的前 8 位。
+   证据 `docs/reports/mailhub-failover-drill.json`（离线 `--validate` 通过，9 项契约测试，其中一条专门保证
+   "时间线没推进就必须判失败"——否则重启第二个集群也能冒充切换）。
    **2026-09-11 PITR/WAL 归档已闭环**：新增 `packages/mailhub/scripts/pitr_drill.py`（真实 `postgres:16.4-alpine`，
    全程在容器内完成以避开 Windows 挂载数据目录的坑）。流程：开 `archive_mode=on` + `archive_command` 并重启 →
    `pg_basebackup -Fp -Xs -R` 取基线 → 写 `before-target` 行 → **等 1.2s 后取 `clock_timestamp()` 作为恢复目标**
