@@ -28,6 +28,7 @@ import json
 import os
 import ssl
 import sys
+from collections.abc import Mapping
 from contextlib import suppress
 from datetime import UTC, datetime
 from email.message import EmailMessage
@@ -168,12 +169,64 @@ def _sync(args: argparse.Namespace, cursor: str | None) -> str:
     return str(page.next_cursor)
 
 
+def validate_bundle(bundle: Mapping[str, Any]) -> list[str]:
+    """Offline re-check of a recorded probe run.
+
+    A bundle is only worth keeping if a reviewer can re-derive the verdict
+    without a server, so the checks listed inside it are re-evaluated here
+    rather than trusted.  A bundle that claims a three-field cursor while its own
+    recorded checks say otherwise is rejected.
+    """
+
+    issues: list[str] = []
+    if bundle.get("kind") != "mailhub.imap.condstore_live_probe":
+        return ["kind_mismatch"]
+    checks = bundle.get("checks")
+    if not isinstance(checks, list) or not checks:
+        return ["checks_missing"]
+    names: set[str] = set()
+    for entry in checks:
+        if not isinstance(entry, Mapping):
+            issues.append("check_not_an_object")
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            issues.append("check_without_a_name")
+            continue
+        names.add(name)
+        if entry.get("ok") is not True:
+            issues.append("check_failed:" + name)
+    if "capability_retrieved" not in names:
+        issues.append("capability_check_missing")
+    if "connector_cursor_carries_modseq" not in names:
+        issues.append("cursor_check_missing")
+    first_cursor = bundle.get("first_cursor")
+    if not isinstance(first_cursor, str) or len(first_cursor.split(":")) != 3:
+        issues.append("first_cursor_is_not_a_modseq_cursor")
+    second_cursor = bundle.get("second_cursor")
+    if (
+        isinstance(second_cursor, str)
+        and second_cursor.split(":")
+        and len(second_cursor.split(":")) != 3
+    ):
+        issues.append("second_cursor_is_not_a_modseq_cursor")
+    if bundle.get("failures") not in ([], None):
+        issues.append("failures_recorded")
+    if bundle.get("passed") is not True:
+        issues.append("not_passed")
+    capabilities = bundle.get("capabilities")
+    if not isinstance(capabilities, list) or not capabilities:
+        issues.append("capabilities_missing")
+    return issues
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", required=True)
+    # Not "required": --validate must be usable without a server to point at.
+    parser.add_argument("--host", default="")
     parser.add_argument("--port", type=int, default=993)
-    parser.add_argument("--username", required=True)
-    parser.add_argument("--password", required=True)
+    parser.add_argument("--username", default="")
+    parser.add_argument("--password", default="")
     parser.add_argument("--folder", default="INBOX")
     parser.add_argument("--ca-file", type=Path, default=None)
     parser.add_argument("--timeout", type=float, default=20.0)
@@ -181,8 +234,31 @@ def main() -> int:
     parser.add_argument("--append-probe-message", action="store_true")
     parser.add_argument("--label", default="unknown")
     parser.add_argument("--json", type=Path, default=None)
+    parser.add_argument(
+        "--validate",
+        type=Path,
+        default=None,
+        help="re-check a recorded bundle offline and exit",
+    )
     args = parser.parse_args()
 
+    if args.validate is not None:
+        recorded: Any = json.loads(args.validate.read_text(encoding="utf-8"))
+        if not isinstance(recorded, Mapping):
+            print("evidence is not a JSON object")
+            return 1
+        problems = validate_bundle(recorded)
+        if problems:
+            print("INVALID")
+            for problem in problems:
+                print("  - " + problem)
+            return 1
+        print("evidence ok: " + str(len(recorded.get("checks") or [])) + " checks")
+        return 0
+
+    if not args.host or not args.username or not args.password:
+        print("--host, --username and --password are required to probe a server")
+        return 2
     if args.ca_file is not None:
         os.environ["SSL_CERT_FILE"] = str(args.ca_file)
 

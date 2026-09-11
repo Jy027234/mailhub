@@ -1489,6 +1489,10 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    正确性：`ENABLE CONDSTORE` 必须在 `SELECT` **之前**协商（RFC 7162 §3.1.8，否则 `HIGHESTMODSEQ`
    不出现在 SELECT 响应里，服务端即使支持也会退回 UID 游标），并新增
    `scripts/imap_condstore_live_probe.py` 对真实 Dovecot 验证 8/8（游标 `1789138475:1:2`）。
+   **2026-09-11 补**：`imap_condstore_live_probe.py` 增加离线 `--validate`（不连服务器即可复核：逐项重判内部 checks、
+   要求 `capability_retrieved` 与 `connector_cursor_carries_modseq` 均存在、游标必须是三段式 MODSEQ 形、`passed` 为真、无 failures），
+   已对已归档证据校验通过（`evidence ok: 8 checks`）；9 项契约测试（kind 不符、无 checks、某项 check 失败、缺必需 check、
+   两段式 UID 游标、未声明通过、有 failures、能力列表为空）。
    保留发现：层级分隔符 163/QQ 为 `/`、Dovecot 为 `.`，不可写死；163 的 `STATUS` 不按请求顺序返回
    字段，必须按名解析（采集器已修复并加不变量交叉校验）。
    **2026-09-11 自建 Exchange 一行判定为环境阻塞**（`blocked_by_environment`）：Exchange Server 没有官方或
