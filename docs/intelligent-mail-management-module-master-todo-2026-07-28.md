@@ -1555,6 +1555,15 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    一种情形**收下 DATA 后断连**（连接器抛 `OutcomeUnknown`，消息实际已投递），另一种**DATA 完成前断连**（未投递），
    再把已投递的那封经本地 Dovecot 暴露，用同一套对账代码分别验证 `found=True→RECONCILED_SUCCEEDED` 与
    `found=False→RETRY_WAIT`，以及端口异常时保持 `OUTCOME_UNKNOWN`。全程不触达真实服务商。
+   **2026-09-11 进度**：(a)(b)(c) 已落地并推送——`b38a003` 新增端口 `OutboundReconciliationPort/OutboundObservation`、
+   共享助手 `outbound_internet_message_id`（连接器改用之）、服务方法 `reconcile_outbound_outcome`（三态映射 + 审计）、
+   HTTP 适配器 `HttpOutboundReconciliationAdapter` 与可选配置 `MAILHUB_OUTBOUND_RECONCILIATION_ENDPOINT`
+   （**故意不进生产必需清单**，未配置＝保持未决，属 fail-closed 默认）；8 项测试，其中 3 项在把「无法判定」并入「不存在」时
+   会失败（已实测）。`dbcfb78` 落地宿主侧 `local_host/outbound.py` + 路由 `POST /v1/mail-host/outbound/observe`：
+   仅当**所有**配置文件夹都成功搜过才回 `found=False`，任一文件夹打不开/连不上即回 `found=None`；8 项测试。
+   **(d) 受控端到端证据仍待做**：扩展 `smtp_wire_conformance.py` 抓包服务器制造「收下 DATA 后断连」与「DATA 完成前断连」两种
+   情形，再用本地 Dovecot 暴露已投递的那封，跑通 `found=True→RECONCILED_SUCCEEDED` / `found=False→RETRY_WAIT` / 端口异常→保持
+   `OUTCOME_UNKNOWN` 三条路径并产出 JSON 证据。
 
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；
