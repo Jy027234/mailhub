@@ -24,6 +24,10 @@ class MailHubSettings(BaseModel):
     host_service_token: SecretStr | None = None
     host_identity_endpoint: str | None = None
     approval_endpoint: str | None = None
+    # Host endpoint that can say whether an outbound message reached the
+    # mailbox.  Unset means OUTCOME_UNKNOWN sends stay unresolved until an
+    # operator decides, which is the fail-closed default.
+    outbound_reconciliation_endpoint: str | None = None
     ai_execution_endpoint: str | None = None
     host_action_endpoint: str | None = None
     knowledge_endpoint: str | None = None
@@ -105,6 +109,7 @@ class MailHubSettings(BaseModel):
             ),
             host_identity_endpoint=os.getenv("MAILHUB_HOST_IDENTITY_ENDPOINT"),
             approval_endpoint=os.getenv("MAILHUB_APPROVAL_ENDPOINT"),
+            outbound_reconciliation_endpoint=os.getenv("MAILHUB_OUTBOUND_RECONCILIATION_ENDPOINT"),
             ai_execution_endpoint=os.getenv("MAILHUB_AI_EXECUTION_ENDPOINT"),
             host_action_endpoint=os.getenv("MAILHUB_HOST_ACTION_ENDPOINT"),
             knowledge_endpoint=os.getenv("MAILHUB_KNOWLEDGE_ENDPOINT"),

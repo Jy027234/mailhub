@@ -322,6 +322,40 @@ class ApprovalPort(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class OutboundObservation:
+    """What a reconciliation probe could establish about one outbound message.
+
+    ``found`` is deliberately three-state.  ``None`` means the probe could not
+    answer -- an unreachable mailbox, a folder the provider does not expose, a
+    search that errored.  A probe that cannot answer must never be read as "not
+    sent": the caller keeps the operation in OUTCOME_UNKNOWN instead of
+    retrying a message that may already be on its way.
+    """
+
+    found: bool | None
+    provider_message_ref: str | None = None
+    mailbox: str | None = None
+    detail: str = ""
+
+
+class OutboundReconciliationPort(Protocol):
+    """Answers whether an outbound message reached the mailbox.
+
+    Only consulted for operations whose outcome is unknown, so an
+    implementation may assume the send was already attempted.
+    """
+
+    async def observe_outbound(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        connection: MailboxConnection,
+        internet_message_id: str,
+    ) -> OutboundObservation: ...
+
+
 class HostActionPort(Protocol):
     async def discover(
         self, *, tenant_id: str, subject_id: str, query: str | None = None

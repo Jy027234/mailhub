@@ -24,6 +24,7 @@ from mailhub.hosts.http import (
     HttpKnowledgeSafetyAdapter,
     HttpKnowledgeSink,
     HttpObjectStoreAdapter,
+    HttpOutboundReconciliationAdapter,
     HttpProviderNotificationVerifierAdapter,
     HttpProviderSubscriptionAdapter,
     HttpQuotaAdapter,
@@ -137,6 +138,14 @@ def create_durable_app(runtime_settings: MailHubSettings | None = None) -> FastA
         approval_port=HttpApprovalAdapter(
             base_url=settings.approval_endpoint,
             headers=headers,
+        ),
+        outbound_reconciliation_port=(
+            HttpOutboundReconciliationAdapter(
+                base_url=settings.outbound_reconciliation_endpoint,
+                headers=headers,
+            )
+            if settings.outbound_reconciliation_endpoint
+            else None
         ),
         host_action_port=HttpHostActionAdapter(
             base_url=settings.host_action_endpoint,

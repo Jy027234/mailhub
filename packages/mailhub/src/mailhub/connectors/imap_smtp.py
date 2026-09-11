@@ -23,7 +23,7 @@ from email.parser import BytesParser
 from email.utils import getaddresses, parsedate_to_datetime
 from uuid import uuid4
 
-from mailhub.domain import MailboxConnection, ProviderName
+from mailhub.domain import MailboxConnection, ProviderName, outbound_internet_message_id
 from mailhub.errors import OutcomeUnknownError, ProviderFailureError, ValidationError
 from mailhub.ports import (
     ProviderCapabilities,
@@ -288,7 +288,7 @@ class ImapSmtpConnector(ProviderConnector):
         if request.bcc_addresses:
             message["Bcc"] = ", ".join(request.bcc_addresses)
         message["Subject"] = request.subject
-        message["Message-ID"] = f"<mailhub-{request.operation_id}@mailhub.invalid>"
+        message["Message-ID"] = outbound_internet_message_id(request.operation_id)
         if request.in_reply_to_message_ref:
             message["In-Reply-To"] = request.in_reply_to_message_ref
             message["References"] = request.in_reply_to_message_ref

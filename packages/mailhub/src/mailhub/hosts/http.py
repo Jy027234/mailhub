@@ -14,6 +14,7 @@ import httpx
 from mailhub.domain import (
     AgentActionRequest,
     MailActionCandidate,
+    MailboxConnection,
     MailMessageProjection,
     PolicyDecision,
     ProviderName,
@@ -46,6 +47,8 @@ from mailhub.ports import (
     KnowledgeSafetyPort,
     NotificationPort,
     ObjectStorePort,
+    OutboundObservation,
+    OutboundReconciliationPort,
     ProviderNotificationDelivery,
     ProviderNotificationVerifierPort,
     ProviderSubscriptionLease,
@@ -1373,6 +1376,63 @@ class HttpApprovalAdapter(_HttpPortBase, ApprovalPort):
         if not isinstance(verified, bool):
             raise ProviderFailureError("approval_response_invalid")
         return verified
+
+
+class HttpOutboundReconciliationAdapter(_HttpPortBase, OutboundReconciliationPort):
+    """Asks the host whether an outbound message reached the mailbox.
+
+    The host owns mailbox access, so it -- not MailHub -- decides how to look:
+    an INBOX search for the Message-ID, a Sent-folder listing, a provider API.
+    Anything the host cannot determine must come back as found=None rather than
+    as "absent", because MailHub treats absent as "safe to send again".
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        headers: Mapping[str, str] | None = None,
+        observe_path: str = "/v1/mail-host/outbound/observe",
+        timeout_seconds: float = 30.0,
+    ) -> None:
+        super().__init__(
+            base_url=base_url,
+            headers=headers,
+            timeout_seconds=timeout_seconds,
+            error_prefix="outbound_reconciliation",
+        )
+        self.observe_path = observe_path
+
+    async def observe_outbound(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        connection: MailboxConnection,
+        internet_message_id: str,
+    ) -> OutboundObservation:
+        _, payload = await self._json_request(
+            "POST",
+            self.observe_path,
+            {
+                "tenant_id": tenant_id,
+                "subject_id": subject_id,
+                "connection_id": str(connection.connection_id),
+                "internet_message_id": internet_message_id,
+            },
+        )
+        found = payload.get("found")
+        if found is not None and not isinstance(found, bool):
+            # A malformed answer is not an answer.
+            return OutboundObservation(found=None, detail="outbound_observation_invalid")
+        reference = payload.get("provider_message_ref")
+        mailbox = payload.get("mailbox")
+        return OutboundObservation(
+            found=found,
+            provider_message_ref=reference if isinstance(reference, str) else None,
+            mailbox=mailbox if isinstance(mailbox, str) else None,
+            detail=str(payload.get("detail", "")),
+        )
 
 
 class HttpObjectStoreAdapter(_HttpPortBase, ObjectStorePort):

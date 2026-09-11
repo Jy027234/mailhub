@@ -608,6 +608,18 @@ class MailDraft:
         object.__setattr__(self, "updated_at", _aware(self.updated_at, "updated_at"))
 
 
+def outbound_internet_message_id(operation_id: UUID) -> str:
+    """The deterministic Message-ID every MailHub send carries.
+
+    Deterministic on purpose.  It is what lets an OUTCOME_UNKNOWN send be
+    reconciled later without persisting anything extra -- the message can be
+    looked up by the identifier it was sent with -- and what makes a duplicate
+    detectable if a retry does go out after all.
+    """
+
+    return f"<mailhub-{operation_id}@mailhub.invalid>"
+
+
 @dataclass(frozen=True, slots=True)
 class MailOutboxOperation:
     operation_id: UUID

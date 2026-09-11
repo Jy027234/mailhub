@@ -43,6 +43,7 @@ from mailhub.domain import (
     digest_text,
     ensure_addresses,
     evaluate_policy,
+    outbound_internet_message_id,
     utc_now,
 )
 from mailhub.errors import (
@@ -95,6 +96,8 @@ from mailhub.ports import (
     KnowledgeSinkPort,
     MailRepository,
     ObjectStorePort,
+    OutboundObservation,
+    OutboundReconciliationPort,
     ProviderConnector,
     ProviderSendRequest,
     ProviderSubscriptionPort,
@@ -219,6 +222,7 @@ class MailService:
         credential_refresh: CredentialRefreshPort | None = None,
         credential_revocation: CredentialRevocationPort | None = None,
         approval_port: ApprovalPort | None = None,
+        outbound_reconciliation_port: OutboundReconciliationPort | None = None,
         host_action_port: HostActionPort | None = None,
         host_identity: HostIdentityPort | None = None,
         knowledge_sink: KnowledgeSinkPort | None = None,
@@ -256,6 +260,7 @@ class MailService:
         self.credential_refresh = credential_refresh
         self.credential_revocation = credential_revocation
         self.approval_port = approval_port
+        self.outbound_reconciliation_port = outbound_reconciliation_port
         self.host_action_port = host_action_port
         self.host_identity = host_identity
         self.knowledge_sink = knowledge_sink
@@ -2967,6 +2972,103 @@ class MailService:
         if operation is None or operation.subject_id != subject_id:
             raise NotFoundError("operation_not_found")
         return operation
+
+    async def reconcile_outbound_outcome(
+        self,
+        *,
+        tenant_id: str,
+        subject_id: str,
+        operation_id: UUID,
+        next_attempt_at: datetime | None = None,
+    ) -> MailOutboxOperation:
+        """Decide an OUTCOME_UNKNOWN send by looking for the message itself.
+
+        The manual entry point records a conclusion somebody else reached.  This
+        one reaches it: a send carries a deterministic Message-ID derived from the
+        operation, so the mailbox can be asked whether that identifier is there.
+
+        Nothing here guesses.  A probe that errors or answers "cannot tell" leaves
+        the operation in OUTCOME_UNKNOWN and records why, because treating an
+        unreachable mailbox as "not sent" would resend a message that may already
+        be delivered.
+        """
+
+        operation = await self.repository.get_operation(
+            tenant_id=tenant_id, operation_id=operation_id
+        )
+        if operation is None or operation.subject_id != subject_id:
+            raise NotFoundError("operation_not_found")
+        if operation.status is not DeliveryStatus.OUTCOME_UNKNOWN:
+            raise ConflictError("outcome_reconciliation_not_applicable")
+        if self.outbound_reconciliation_port is None:
+            raise ProviderFailureError("outbound_reconciliation_unavailable")
+        connection = await self.repository.get_connection(
+            tenant_id=tenant_id, connection_id=operation.connection_id
+        )
+        if connection is None:
+            raise NotFoundError("connection_not_found")
+        internet_message_id = outbound_internet_message_id(operation_id)
+        try:
+            observation = await self.outbound_reconciliation_port.observe_outbound(
+                tenant_id=tenant_id,
+                subject_id=subject_id,
+                connection=connection,
+                internet_message_id=internet_message_id,
+            )
+        except MailHubError as exc:
+            # A probe failure is not evidence about the message.  The specific
+            # reason rides in message; code is only the error family.
+            observation = OutboundObservation(found=None, detail=exc.message)
+        except Exception as exc:  # noqa: BLE001 - a broken probe must not decide a send
+            observation = OutboundObservation(found=None, detail=type(exc).__name__)
+
+        if observation.found is None:
+            await self.repository.append_audit(
+                self._audit(
+                    "mail.outbox.reconciliation_indeterminate",
+                    tenant_id=tenant_id,
+                    subject_id=subject_id,
+                    target_ref=str(operation_id),
+                    detail=observation.detail or "probe_could_not_determine",
+                    metadata={"internet_message_id": internet_message_id},
+                )
+            )
+            return operation
+
+        if observation.found:
+            status = DeliveryStatus.RECONCILED_SUCCEEDED
+            reference = observation.provider_message_ref or internet_message_id
+            attempt_at = None
+            error_code = None
+        else:
+            status = DeliveryStatus.RETRY_WAIT
+            reference = None
+            attempt_at = next_attempt_at or (utc_now() + timedelta(minutes=5))
+            error_code = "outbound_absent_after_unknown"
+        reconciled = await self.repository.reconcile_outcome_unknown(
+            tenant_id=tenant_id,
+            operation_id=operation_id,
+            status=status,
+            provider_message_ref=reference,
+            provider_request_id=None,
+            error_code=error_code,
+            next_attempt_at=attempt_at,
+        )
+        await self.repository.append_audit(
+            self._audit(
+                "mail.outbox.reconciled",
+                tenant_id=tenant_id,
+                subject_id=subject_id,
+                target_ref=str(operation_id),
+                detail=status.value,
+                metadata={
+                    "internet_message_id": internet_message_id,
+                    "found": observation.found,
+                    "mailbox": observation.mailbox or "",
+                },
+            )
+        )
+        return reconciled
 
     async def reconcile_outcome_unknown(
         self,
