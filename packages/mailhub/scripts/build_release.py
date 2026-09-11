@@ -132,6 +132,10 @@ def run_gates(report: ReleaseReport, mode: str) -> None:
         # so this runs the UI in headless Chromium.  A missing npm, node_modules
         # or Playwright browser is a failure, never a silent skip.
         ("ui-browser-a11y", [python, "scripts/check_ui_browser_a11y.py"]),
+        # The external review pack references evidence by path; a moved or
+        # deleted file must fail the release rather than leave a pack that
+        # promises a reviewer something that is no longer there.
+        ("external-review-pack", [python, "scripts/check_external_review_pack.py"]),
     ]
     for name, command in gate_commands:
         code, output = _run(command, cwd=PACKAGE_ROOT)

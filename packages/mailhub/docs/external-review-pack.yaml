@@ -1,0 +1,214 @@
+# External review pack for the MailHub module.
+#
+# These are the items a security, SRE, privacy or release owner has to sign off
+# before the module is used in production.  Nothing here signs anything: the
+# entries record what a reviewer can read today, and what only they can do.
+#
+# check_external_review_pack.py enforces the honesty of this file: every listed
+# path must exist, an entry may not claim to be signed without a signer, and an
+# entry may not be blocked without saying what the reviewer has to do.
+schema: mailhub.external_review_pack.v1
+module: "@fyjtech/mailhub"
+
+reviews:
+  - id: MAIL-SEC-001
+    owner: security
+    title: OAuth state/nonce/PKCE, redirect URI, CSRF and token rotation penetration test
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/tests/test_oauth.py
+      - packages/mailhub/tests/test_oauth_evidence_collector.py
+      - packages/mailhub/scripts/host_conformance.py
+    reviewer_actions:
+      - Run an independent penetration test against a deployed host, not the unit suite.
+      - Attempt redirect-URI substitution, state replay and nonce reuse against the live callback.
+
+  - id: MAIL-SEC-002
+    owner: security
+    title: Negative authorisation matrix across tenant, user, account, folder, object, vector and trace
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/tests/test_security.py
+      - packages/mailhub/tests/test_api.py
+      - packages/mailhub/tests/test_host_conformance.py
+    reviewer_actions:
+      - Attempt cross-tenant reads against a deployed database with the application role.
+      - Confirm Row Level Security is forced rather than assumed.
+
+  - id: MAIL-SEC-003
+    owner: security
+    title: HTML XSS, tracking pixel, SSRF, MIME confusion and hostile attachment handling
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/tests/test_importers.py
+      - packages/mailhub/tests/test_webhook.py
+      - packages/mailhub/tests/test_notifications.py
+    reviewer_actions:
+      - Send hostile mail through a real provider mailbox and confirm no fetch is made by MailHub.
+      - Review the object-store path for SSRF reachable from a provider-supplied URL.
+
+  - id: MAIL-SEC-004
+    owner: security
+    title: Secret, body and PII scanning across logs, traces, metrics, errors, analytics, backups and dead letters
+    status: evidence_ready
+    local_evidence:
+      - packages/mailhub/scripts/check_secrets.py
+      - packages/mailhub/tests/test_observability.py
+      - packages/mailhub/tests/test_provider_evidence.py
+    reviewer_actions:
+      - Confirm the scanner covers a deployed host's log sink, which is outside this repository.
+
+  - id: MAIL-SEC-005
+    owner: security
+    title: Connection revocation, account deletion, export, TTL cleanup and deletion proof
+    status: evidence_ready
+    local_evidence:
+      - packages/mailhub/tests/test_privacy_lifecycle.py
+      - packages/mailhub/tests/test_revocation_evidence_collector.py
+      - local-host/scripts/vault_backend_conformance.py
+    reviewer_actions:
+      - Confirm deletion proof against a real object store, which this repository does not host.
+
+  - id: MAIL-SEC-006
+    owner: privacy
+    title: PIPL/GDPR, provider terms, cross-border transfer, processors and user consent review
+    status: not_started
+    local_evidence: []
+    reviewer_actions:
+      - Legal review; no repository artifact can substitute for it.
+
+  - id: MAIL-SEC-007
+    owner: security
+    title: Dependency, image, SDK, SBOM, signature, vulnerability, supply chain and licence gates
+    status: evidence_ready
+    local_evidence:
+      - packages/mailhub/scripts/generate_sbom.py
+      - packages/mailhub/scripts/check_license_gate.py
+      - packages/mailhub/scripts/check_provenance.py
+      - packages/mailhub/source-ledger.yaml
+    reviewer_actions:
+      - Confirm the SBOM is generated in the release pipeline rather than committed by hand.
+
+  - id: MAIL-OPS-001
+    owner: sre
+    title: SLO, alerting, on-call and incident runbooks for provider outage, credential leak, mis-send, knowledge pollution and cross-tenant events
+    status: not_started
+    local_evidence: []
+    reviewer_actions:
+      - Write the runbooks against the deployed topology; this repository has no pager or on-call rota.
+
+  - id: MAIL-OPS-002
+    owner: sre
+    title: Backup, restore, PITR and object lifecycle drill with measured RPO and RTO
+    status: evidence_ready
+    local_evidence:
+      - packages/mailhub/scripts/dr_drill.py
+      - packages/mailhub/scripts/pitr_drill.py
+      - packages/mailhub/scripts/failover_drill.py
+      - docs/reports/mailhub-dr-drill-2026-08-19.json
+      - docs/reports/mailhub-pitr-drill.json
+      - docs/reports/mailhub-failover-drill.json
+    reviewer_actions:
+      - Repeat against the production topology; object lifecycle and cross-region copies are not covered here.
+
+  - id: MAIL-OPS-003
+    owner: sre
+    title: Fault injection for webhook gaps, invalid cursors, 429/5xx, DNS and network loss, worker kill, lease expiry and database failover
+    status: evidence_ready
+    local_evidence:
+      - packages/mailhub/scripts/fault_drill.py
+      - docs/reports/mailhub-fault-drill.json
+      - packages/mailhub/tests/test_outbox_recovery.py
+    reviewer_actions:
+      - Extend to provider-side 429/5xx and KMS or scanner unavailability, which need real services.
+
+  - id: MAIL-OPS-004
+    owner: sre
+    title: Capacity test across accounts, messages per day, long threads, large attachments, search, AI queue and provider quotas
+    status: evidence_ready
+    local_evidence:
+      - packages/mailhub/scripts/capacity_drill.py
+      - docs/reports/mailhub-capacity-drill.json
+    reviewer_actions:
+      - Re-run at the intended production volume; the recorded baseline is a floor, not a capacity claim.
+
+  - id: MAIL-OPS-005
+    owner: sre
+    title: Cost dashboard for provider API, object storage, parsing, OCR, model tokens, cost per thousand messages and budget blocking
+    status: not_started
+    local_evidence: []
+    reviewer_actions:
+      - Build against the deployed billing sources; no cost telemetry exists in this repository.
+
+  - id: MAIL-OPS-006
+    owner: sre
+    title: Tenant, provider and global kill switches with four-eyes change control and audit
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/src/mailhub/ports.py
+      - packages/mailhub/tests/test_host_conformance.py
+      - local-host/local_host/routes.py
+    reviewer_actions:
+      - Deploy the host-side four-eyes change interface, persistent switch ledger and alerting.
+
+  - id: MAIL-REL-001
+    owner: release
+    title: Internal test users only, controlled provider test accounts
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/docs/provider-compatibility.yaml
+    reviewer_actions:
+      - Enable the feature flag for named internal users in the pilot product.
+
+  - id: MAIL-REL-006
+    owner: release
+    title: Second host completes the same read and candidate end-to-end path, proving core portability
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/tests/test_second_host.py
+      - packages/mailhub/tests/test_host_conformance.py
+    reviewer_actions:
+      - Run the conformance bundle against a second, independently built host.
+
+  - id: MAIL-REL-007
+    owner: release
+    title: Thirty consecutive days at SLO with no data leak, double send or duplicate task
+    # Not "not_started": the local drills are real inputs to this review, and
+    # only the thirty days of observation is out of reach here.
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/scripts/failover_drill.py
+      - docs/reports/mailhub-fault-drill.json
+    reviewer_actions:
+      - Observe a running deployment for thirty days; no local drill can produce this.
+
+  - id: MAIL-REL-008
+    owner: release
+    title: Production security, privacy, provider verification, data residency and licence approval
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/NOTICE
+      - packages/mailhub/source-ledger.yaml
+    reviewer_actions:
+      - Security, privacy and provider owners sign; the records belong to the adopting product.
+
+  - id: MAIL-REL-009
+    owner: release
+    title: GA compatibility matrix, known limitations, migration and rollback, support policy and roadmap
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/docs/provider-compatibility.yaml
+      - packages/mailhub/scripts/migration_drill.py
+      - docs/reports/mailhub-migration-drill.json
+    reviewer_actions:
+      - Publish for the adopting product; the migration drill proves the kit against a labelled fixture, not a customer cutover.
+
+  - id: MAIL-REL-011
+    owner: release
+    title: Shadow, cutover, rollback and cleanup evidence for MX, with infrastructure and business ownership stated separately
+    status: blocked_on_external
+    local_evidence:
+      - packages/mailhub/scripts/migration_drill.py
+      - docs/reports/mailhub-migration-drill.json
+    reviewer_actions:
+      - Run on the real legacy module; the fixture drill is explicitly not a customer migration.

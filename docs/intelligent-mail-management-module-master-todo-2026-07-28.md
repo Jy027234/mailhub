@@ -1867,6 +1867,13 @@ AeroLink adapter：
 - [ ] **MAIL-OPS-006（P1/SRE）**：实现租户级、Provider 级和全局 Kill Switch；操作有四眼审批和审计。MailHub Core 已提供 `KillSwitchPort`、HTTP/内存 adapter、排队/规则/发送前 fail-closed 检查和审计；宿主四眼变更接口、持久开关账本、告警与事故演练仍待部署验收。
 
 验收：所有 P0 安全负向用例、恢复演练和 incident runbook 通过；已知缺失依赖仍显示开放项，不以“架构上
+   **2026-09-11 外部评审包已建立**：新增 `packages/mailhub/docs/external-review-pack.yaml`（覆盖 SEC-001..007、
+   OPS-001..006、REL-001/006/007/008/009/011 共 **19 项**），以及 fail-closed 校验器
+   `scripts/check_external_review_pack.py`（已接入发布门禁 `external-review-pack`）。**本仓库无法替任何人完成这些评审**，
+   所以真正的风险不是「评审缺失」，而是「评审包读起来像已经评审过」。校验器正是为此存在：**没有具名签署人与日期就不得声称已签署**；
+   **声明 blocked 必须写清评审人该做什么**；**声称有证据就必须列出且文件必须存在**；**`not_started` 不得列证据**（有东西可读就不算没开始）；
+   **必需条目集合不得缩小**（少一条即失败）。当前如实统计：**6 项 evidence_ready、10 项 blocked_on_external、3 项 not_started、0 项已签署**，
+   并打印提示「没有任何外部评审已签署」。10 项契约测试。该门禁同时防止包里的证据路径因文件移动而失效。
 可支持”替代真实证据。
 
 ### M12 — CAPlatform 受控试点、第二宿主与 GA
