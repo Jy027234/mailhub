@@ -1418,6 +1418,9 @@ class HttpOutboundReconciliationAdapter(_HttpPortBase, OutboundReconciliationPor
                 "tenant_id": tenant_id,
                 "subject_id": subject_id,
                 "connection_id": str(connection.connection_id),
+                # The host owns mailbox access, so it needs the credential
+                # reference it issued rather than MailHub's connection id.
+                "credential_ref": connection.credential_ref,
                 "internet_message_id": internet_message_id,
             },
         )

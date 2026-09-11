@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from local_host.outbound import folder_list
+
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -27,6 +29,13 @@ class HostSettings:
     # Production secret backend.  When configured, the host persists only a
     # Vault pointer and the application password itself lives in Vault, so a
     # database dump, backup or replica never carries a usable credential.
+    # Mailbox access for OUTCOME_UNKNOWN reconciliation.  MailHub asks the
+    # host whether a sent message is in the mailbox, and the host is the side
+    # that owns IMAP credentials, so the server address lives here.  Leaving it
+    # empty makes the observation indeterminate rather than "absent".
+    imap_host: str = ""
+    imap_port: int = 993
+    outbound_folders: tuple[str, ...] = ()
     vault_addr: str = ""
     vault_token: str = ""
     vault_mount: str = "secret"
@@ -66,6 +75,9 @@ class HostSettings:
             ai_gateway_url=os.getenv("HOST_AI_GATEWAY_URL") or None,
             ai_gateway_model=os.getenv("HOST_AI_GATEWAY_MODEL", ""),
             ai_gateway_api_key=os.getenv("HOST_AI_GATEWAY_API_KEY", ""),
+            imap_host=os.getenv("MAILHUB_IMAP_HOST", ""),
+            imap_port=int(os.getenv("MAILHUB_IMAP_PORT", "993")),
+            outbound_folders=folder_list(os.getenv("HOST_OUTBOUND_FOLDERS", "")),
             vault_addr=os.getenv("HOST_VAULT_ADDR", "").rstrip("/"),
             vault_token=os.getenv("HOST_VAULT_TOKEN", ""),
             vault_mount=os.getenv("HOST_VAULT_MOUNT", "secret"),

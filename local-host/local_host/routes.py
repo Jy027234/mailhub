@@ -9,6 +9,7 @@ side-effect ledger is idempotent.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -22,6 +23,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+from local_host.outbound import credential_fields, observe_outbound_in_mailbox
 
 from local_host import _bff  # noqa: F401  (bootstrap apps/bff/src on sys.path)
 from local_host.ai import (
@@ -182,6 +185,49 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
             revalidation=revalidation,
         )
         return {"verified": verified}
+
+    @router.post("/v1/mail-host/outbound/observe", dependencies=[service_auth])
+    async def outbound_observe(request: Request) -> dict[str, object]:
+        """Say whether an outbound message is in the mailbox, or say nothing.
+
+        Never returns found=False for a mailbox it could not read: MailHub
+        treats absent as "safe to send again", so an unreadable folder has to
+        come back as indeterminate.
+        """
+
+        body = _json_body(request)
+        internet_message_id = body.get("internet_message_id")
+        if not isinstance(internet_message_id, str) or not internet_message_id:
+            raise HTTPException(
+                status_code=422, detail={"code": "outbound_observe_invalid"}
+            )
+        credential_ref = body.get("credential_ref")
+        if not isinstance(credential_ref, str) or not stores.is_imap_credential_ref(
+            credential_ref
+        ):
+            return {"found": None, "detail": "credential_not_resolvable"}
+        try:
+            resolved = stores.resolve_imap_credential(
+                credential_ref=credential_ref,
+                tenant_id=str(body.get("tenant_id", "")),
+                subject_id=str(body.get("subject_id", "")),
+            )
+        except StoreError as exc:
+            return {"found": None, "detail": exc.code}
+        fields = credential_fields(resolved)
+        if fields is None:
+            return {"found": None, "detail": "credential_not_found"}
+        username, password = fields
+        folders = settings.outbound_folders or ("INBOX",)
+        return await asyncio.to_thread(
+            observe_outbound_in_mailbox,
+            host=settings.imap_host,
+            port=settings.imap_port,
+            username=username,
+            password=password,
+            folders=folders,
+            internet_message_id=internet_message_id,
+        )
 
     # ---- OAuth state / exchange / credentials (reference broker) -----------
 
