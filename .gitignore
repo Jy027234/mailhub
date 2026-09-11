@@ -16,3 +16,6 @@ deepseek-harness/
 
 # Vitest browser-mode attachments (failure screenshots) are run output.
 .vitest/
+
+# Scratch commit-message files.
+.git-msg-*.txt
