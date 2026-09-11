@@ -50,11 +50,12 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["outboundEnabled", "ruleAutomationEnabled", "jobLeaseSeconds", "allowSandbox"],
+      "required": ["outboundEnabled", "ruleAutomationEnabled", "jobLeaseSeconds", "allowSandbox", "smtpMaxSendBytes"],
       "properties": {
         "outboundEnabled": { "type": "boolean" },
         "ruleAutomationEnabled": { "type": "boolean" },
         "jobLeaseSeconds": { "type": "string", "pattern": "^[0-9]+$" },
+        "smtpMaxSendBytes": { "type": "string", "pattern": "^[0-9]+$" },
         "allowSandbox": { "const": false, "description": "a released chart must never register the sandbox connector" }
       }
     },

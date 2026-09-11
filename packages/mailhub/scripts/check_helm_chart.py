@@ -218,6 +218,10 @@ def main() -> int:
             "env_imap_disabled_by_default",
             environment.get("MAILHUB_IMAP_ENABLED", {}).get("value") == "false",
         )
+        check(
+            "env_smtp_size_bound_rendered",
+            environment.get("MAILHUB_SMTP_MAX_SEND_BYTES", {}).get("value") == "10485760",
+        )
 
         secret_backed = {
             name: entry

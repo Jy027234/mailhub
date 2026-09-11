@@ -85,6 +85,9 @@ runtime:
   ruleAutomationEnabled: false
   jobLeaseSeconds: "300"
   allowSandbox: false
+  # Outbound message bound the connector enforces before contacting the
+  # provider; the packaged default is 10 MiB.
+  smtpMaxSendBytes: "10485760"
 
 # Provider switches.  The domestic path is IMAP/SMTP with an application
 # password; Gmail and Microsoft Graph stay off unless a release enables them.

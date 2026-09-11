@@ -104,6 +104,8 @@ belt-and-braces: values.schema.json already constrains the same fields.
   value: {{ .Values.runtime.outboundEnabled | quote }}
 - name: MAILHUB_JOB_LEASE_SECONDS
   value: {{ .Values.runtime.jobLeaseSeconds | quote }}
+- name: MAILHUB_SMTP_MAX_SEND_BYTES
+  value: {{ .Values.runtime.smtpMaxSendBytes | quote }}
 - name: MAILHUB_RULE_AUTOMATION_ENABLED
   value: {{ .Values.runtime.ruleAutomationEnabled | quote }}
 - name: MAILHUB_IMAP_ENABLED
