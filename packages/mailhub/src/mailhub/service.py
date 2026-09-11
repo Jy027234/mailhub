@@ -146,7 +146,13 @@ class InMemoryApprovalPort(ApprovalPort):
         *,
         confirmation_ref: str,
         action: AgentActionRequest,
+        approver_subject_id: str | None = None,
     ) -> bool:
+        # A single-principal double cannot separate the requester from the
+        # approver, so the identity is accepted and deliberately not enforced.
+        # The conformance kit is expected to report separation of duties as
+        # unproven for this port rather than as satisfied.
+        del approver_subject_id
         return (
             confirmation_ref in self._approved
             or confirmation_ref == f"local-confirmation:{action.action_id}"
@@ -4272,6 +4278,8 @@ class MailService:
             confirmed = await self.approval_port.verify_confirmation(
                 confirmation_ref=confirmation_ref,
                 action=action,
+                # The principal presenting the confirmation right now.
+                approver_subject_id=subject_id,
             )
             if not confirmed:
                 raise AuthorizationError("confirmation_invalid")
@@ -4279,6 +4287,7 @@ class MailService:
             confirmed = await self.approval_port.verify_confirmation(
                 confirmation_ref=confirmation_ref,
                 action=action,
+                approver_subject_id=subject_id,
             )
             if not confirmed:
                 raise AuthorizationError("confirmation_invalid")
@@ -4761,14 +4770,21 @@ class MailService:
             and operation.approval_ref
             and self.approval_port is not None
             and await self.approval_port.verify_confirmation(
-                confirmation_ref=operation.approval_ref, action=action
+                confirmation_ref=operation.approval_ref,
+                action=action,
+                # Re-validation immediately before provider I/O, not a fresh
+                # approval act: the approver's identity is not persisted on the
+                # operation yet, so asserting one here would be a lie.
+                approver_subject_id=None,
             )
         ):
             return None
         if operation.approval_ref and (
             self.approval_port is None
             or not await self.approval_port.verify_confirmation(
-                confirmation_ref=operation.approval_ref, action=action
+                confirmation_ref=operation.approval_ref,
+                action=action,
+                approver_subject_id=None,
             )
         ):
             return "approval_revoked"
@@ -4875,6 +4891,7 @@ class MailService:
         if not await self.approval_port.verify_confirmation(
             confirmation_ref=approval_ref,
             action=action,
+            approver_subject_id=subject_id,
         ):
             raise AuthorizationError("candidate_approval_invalid")
         candidate_to_persist = candidate

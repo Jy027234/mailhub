@@ -301,7 +301,22 @@ class ApprovalPort(Protocol):
         *,
         confirmation_ref: str,
         action: AgentActionRequest,
-    ) -> bool: ...
+        approver_subject_id: str | None = None,
+    ) -> bool:
+        """Answer whether ``action`` was approved under ``confirmation_ref``.
+
+        ``require_confirmation`` records the principal that asked for the
+        confirmation.  ``approver_subject_id`` is the principal presenting it
+        now, so a host that promises separation of duties can refuse when the
+        two are the same.  It is optional: hosts that have not adopted the
+        stricter policy keep working unchanged, and the conformance kit reports
+        their separation of duties as unproven rather than as passed.
+
+        ``None`` means the caller is re-validating a confirmation that was
+        already exercised -- the pre-send re-check -- not presenting a fresh
+        approval, so it must not be read as a distinct approver.
+        """
+        ...
 
 
 class HostActionPort(Protocol):

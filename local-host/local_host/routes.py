@@ -58,9 +58,9 @@ def _html(title: str, message: str, detail: str = "") -> HTMLResponse:
 
 
 def _canonical_json(value: object) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
 
 
 def _digest_bytes(value: bytes) -> str:
@@ -134,9 +134,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         # cannot know the service-constructed action id in advance).  When an
         # action IS bound, verification enforces the binding.
         action_id = str(action.get("action_id", "")) if isinstance(action, dict) else ""
-        action_digest = (
-            _digest_bytes(_canonical_json(action)) if isinstance(action, dict) else ""
-        )
+        action_digest = _digest_bytes(_canonical_json(action)) if isinstance(action, dict) else ""
         confirmation_ref = stores.create_approval(
             tenant_id=str(body.get("tenant_id", "")),
             subject_id=str(body.get("subject_id", "")),
@@ -151,15 +149,15 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         confirmation_ref = body.get("confirmation_ref")
         action = body.get("action")
         if not isinstance(confirmation_ref, str) or not isinstance(action, dict):
-            raise HTTPException(
-                status_code=422, detail={"code": "approval_verify_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "approval_verify_invalid"})
         action_id = str(action.get("action_id", ""))
         action_digest = _digest_bytes(_canonical_json(action))
+        approver = body.get("approver_subject_id")
         verified = stores.verify_approval(
             confirmation_ref=confirmation_ref,
             action_id=action_id,
             action_digest=action_digest,
+            approver_subject_id=approver if isinstance(approver, str) else None,
         )
         return {"verified": verified}
 
@@ -197,9 +195,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     async def credential_resolve(request: Request) -> dict[str, object]:
         body = _json_body(request)
         credential_ref = body.get("credential_ref")
-        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(
-            credential_ref
-        ):
+        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(credential_ref):
             try:
                 resolved = stores.resolve_imap_credential(
                     credential_ref=credential_ref,
@@ -207,13 +203,9 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                     subject_id=str(body.get("subject_id", "")),
                 )
             except StoreError as exc:
-                raise HTTPException(
-                    status_code=exc.status_code, detail={"code": exc.code}
-                ) from exc
+                raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
             if resolved is None:
-                raise HTTPException(
-                    status_code=404, detail={"code": "credential_not_found"}
-                )
+                raise HTTPException(status_code=404, detail={"code": "credential_not_found"})
             return {"credentials": resolved}
         try:
             credentials = await broker.resolve(CredentialResolve.model_validate(body))
@@ -225,9 +217,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     async def credential_refresh(request: Request) -> dict[str, object]:
         body = _json_body(request)
         credential_ref = body.get("credential_ref")
-        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(
-            credential_ref
-        ):
+        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(credential_ref):
             # Application passwords do not rotate; the durable answer is
             # "same credential, unchanged version" so MailHub can persist its
             # metadata-only refresh observation.
@@ -237,9 +227,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                 subject_id=str(body.get("subject_id", "")),
             )
             if resolved is None:
-                raise HTTPException(
-                    status_code=404, detail={"code": "credential_not_found"}
-                )
+                raise HTTPException(status_code=404, detail={"code": "credential_not_found"})
             return {
                 "metadata": {
                     "credential_ref": credential_ref,
@@ -263,9 +251,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     async def credential_revoke(request: Request) -> dict[str, object]:
         body = _json_body(request)
         credential_ref = body.get("credential_ref")
-        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(
-            credential_ref
-        ):
+        if isinstance(credential_ref, str) and stores.is_imap_credential_ref(credential_ref):
             revoked = stores.revoke_imap_credential(
                 credential_ref=credential_ref,
                 tenant_id=str(body.get("tenant_id", "")),
@@ -310,9 +296,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                 password=password,
             )
         except StoreError as exc:
-            raise HTTPException(
-                status_code=exc.status_code, detail={"code": exc.code}
-            ) from exc
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
         return {"credential_ref": credential_ref, "provider": "imap_smtp"}
 
     # ---- host actions / knowledge ------------------------------------------
@@ -341,9 +325,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         action = body.get("action")
         if not isinstance(action, dict) or not isinstance(action.get("action_id"), str):
             raise HTTPException(status_code=422, detail={"code": "host_action_invalid"})
-        idempotency_key = request.headers.get("Idempotency-Key") or str(
-            action["action_id"]
-        )
+        idempotency_key = request.headers.get("Idempotency-Key") or str(action["action_id"])
         return stores.record_action(
             idempotency_key=idempotency_key,
             tenant_id=str(body.get("tenant_id", "")),
@@ -356,12 +338,9 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         body = _json_body(request)
         candidate_id = str(body.get("candidate_id", ""))
         if not candidate_id:
-            raise HTTPException(
-                status_code=422, detail={"code": "knowledge_candidate_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "knowledge_candidate_invalid"})
         idempotency_key = (
-            request.headers.get("Idempotency-Key")
-            or f"mailhub-knowledge:{candidate_id}"
+            request.headers.get("Idempotency-Key") or f"mailhub-knowledge:{candidate_id}"
         )
         return stores.record_knowledge(
             idempotency_key=idempotency_key,
@@ -374,20 +353,14 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
     async def knowledge_safety_evaluate(request: Request) -> dict[str, object]:
         body = _json_body(request)
         if not isinstance(body.get("candidate_id"), str):
-            raise HTTPException(
-                status_code=422, detail={"code": "knowledge_candidate_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "knowledge_candidate_invalid"})
         candidate = body.get("candidate")
         if not isinstance(candidate, dict):
-            raise HTTPException(
-                status_code=422, detail={"code": "knowledge_candidate_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "knowledge_candidate_invalid"})
         # Real local DLP: pattern-detect sensitive data in the candidate
         # payload.  A hit quarantines the candidate (apply fails closed).
         text = json.dumps(candidate, ensure_ascii=False, default=str)
-        decision = evaluate_text(
-            text, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None
-        )
+        decision = evaluate_text(text, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None)
         decision_payload: dict[str, object] = {
             "security_state": decision.security_state,
             "rights_state": decision.rights_state,
@@ -399,9 +372,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         decision_payload["scanner"] = decision.scanner
         return {"decision": decision_payload}
 
-    @router.post(
-        "/v1/mail-host/knowledge/lifecycle/revoke", dependencies=[service_auth]
-    )
+    @router.post("/v1/mail-host/knowledge/lifecycle/revoke", dependencies=[service_auth])
     async def knowledge_lifecycle_revoke(request: Request) -> dict[str, object]:
         body = _json_body(request)
         request_id = str(body.get("request_id", ""))
@@ -423,9 +394,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         content = body.get("content")
         content_sha256 = body.get("content_sha256")
         if not isinstance(content, str) or not isinstance(content_sha256, str):
-            raise HTTPException(
-                status_code=422, detail={"code": "object_store_payload_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "object_store_payload_invalid"})
         raw_expires = body.get("expires_at")
         expires_at: datetime | None = None
         if raw_expires is not None:
@@ -445,9 +414,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                 expires_at=expires_at,
             )
         except StoreError as exc:
-            raise HTTPException(
-                status_code=exc.status_code, detail={"code": exc.code}
-            ) from exc
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
         return {"object_ref": object_ref}
 
     @router.post("/v1/mail-host/objects/read", dependencies=[service_auth])
@@ -455,9 +422,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         body = _json_body(request)
         object_ref = body.get("object_ref")
         if not isinstance(object_ref, str):
-            raise HTTPException(
-                status_code=422, detail={"code": "object_store_reference_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "object_store_reference_invalid"})
         try:
             content = stores.get_object(
                 tenant_id=str(body.get("tenant_id", "")),
@@ -465,9 +430,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                 object_ref=object_ref,
             )
         except StoreError as exc:
-            raise HTTPException(
-                status_code=exc.status_code, detail={"code": exc.code}
-            ) from exc
+            raise HTTPException(status_code=exc.status_code, detail={"code": exc.code}) from exc
         return {"content": content}
 
     @router.post("/v1/mail-host/objects/delete", dependencies=[service_auth])
@@ -475,9 +438,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         body = _json_body(request)
         object_ref = body.get("object_ref")
         if not isinstance(object_ref, str):
-            raise HTTPException(
-                status_code=422, detail={"code": "object_store_reference_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "object_store_reference_invalid"})
         stores.delete_object(
             tenant_id=str(body.get("tenant_id", "")),
             subject_id=str(body.get("subject_id", "")),
@@ -500,9 +461,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         name = body.get("name")
         fields = body.get("fields")
         if not isinstance(name, str) or not isinstance(fields, dict):
-            raise HTTPException(
-                status_code=422, detail={"code": "telemetry_payload_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "telemetry_payload_invalid"})
         stores.record_telemetry(name=name, fields=fields)
         return {}
 
@@ -520,9 +479,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         body = _json_body(request)
         limits = body.get("limits")
         if not isinstance(limits, dict):
-            raise HTTPException(
-                status_code=422, detail={"code": "quota_limits_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "quota_limits_invalid"})
         raw_account = body.get("account_id")
         account_id: UUID | None = None
         if raw_account is not None:
@@ -542,9 +499,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
             max_per_day=int(limits.get("max_per_day", 0) or 0),
         )
         if lease is None:
-            return JSONResponse(
-                status_code=429, content={"code": "quota_limit_exceeded"}
-            )
+            return JSONResponse(status_code=429, content={"code": "quota_limit_exceeded"})
         return JSONResponse(
             content={
                 "lease": {
@@ -606,20 +561,15 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         operation = body.get("operation")
         source = body.get("source")
         if operation != "mail.message.analyze" or not isinstance(source, dict):
-            raise HTTPException(
-                status_code=422, detail={"code": "ai_execution_input_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "ai_execution_input_invalid"})
         message_id = source.get("message_id")
         subject = source.get("subject")
         body_text = source.get("body_text")
         content_sha256 = source.get("content_sha256")
         if not all(
-            isinstance(value, str)
-            for value in (message_id, subject, body_text, content_sha256)
+            isinstance(value, str) for value in (message_id, subject, body_text, content_sha256)
         ):
-            raise HTTPException(
-                status_code=422, detail={"code": "ai_execution_source_invalid"}
-            )
+            raise HTTPException(status_code=422, detail={"code": "ai_execution_source_invalid"})
         try:
             parsed_id = UUID(str(message_id))
         except ValueError as exc:
@@ -654,9 +604,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
             # result already abstains.
             return JSONResponse(
                 content={
-                    "result": serialize_ai_result(
-                        baseline, model_ref="mailhub-rules-abstain-v1"
-                    )
+                    "result": serialize_ai_result(baseline, model_ref="mailhub-rules-abstain-v1")
                 }
             )
 
@@ -678,9 +626,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
                 merged = merge_ai_result(baseline, model_output)
                 return JSONResponse(
                     content={
-                        "result": serialize_ai_result(
-                            merged, model_ref=settings.ai_gateway_model
-                        )
+                        "result": serialize_ai_result(merged, model_ref=settings.ai_gateway_model)
                     }
                 )
             except Exception:
@@ -697,9 +643,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
 
         return JSONResponse(
             content={
-                "result": serialize_ai_result(
-                    baseline, model_ref="mailhub-rules-pass-through-v1"
-                )
+                "result": serialize_ai_result(baseline, model_ref="mailhub-rules-pass-through-v1")
             }
         )
 
@@ -708,17 +652,11 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         body = _json_body(request)
         content = body.get("content")
         if not isinstance(content, str):
-            raise HTTPException(
-                status_code=422, detail={"code": "av_scan_input_invalid"}
-            )
-        decision = evaluate_text(
-            content, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None
-        )
+            raise HTTPException(status_code=422, detail={"code": "av_scan_input_invalid"})
+        decision = evaluate_text(content, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None)
         return JSONResponse(
             content={
-                "status": "clean"
-                if decision.security_state == "cleared"
-                else "quarantined",
+                "status": "clean" if decision.security_state == "cleared" else "quarantined",
                 "scanner": decision.scanner,
                 "categories": list(decision.categories),
             }
@@ -730,9 +668,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
         content = body.get("content")
         if not isinstance(content, str):
             raise HTTPException(status_code=422, detail={"code": "dlp_input_invalid"})
-        decision = evaluate_text(
-            content, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None
-        )
+        decision = evaluate_text(content, clamav_host=os.environ.get("HOST_CLAMAV_HOST") or None)
         return JSONResponse(
             content={
                 "security_state": decision.security_state,
@@ -774,9 +710,7 @@ def build_routes(settings: HostSettings, stores: LocalStores, broker: Any) -> AP
             )
         payload: Any = response.json()
         data = payload.get("data", payload) if isinstance(payload, dict) else {}
-        authorization_url = (
-            data.get("authorization_url") if isinstance(data, dict) else None
-        )
+        authorization_url = data.get("authorization_url") if isinstance(data, dict) else None
         state_value = data.get("state") if isinstance(data, dict) else None
         if not isinstance(authorization_url, str) or not isinstance(state_value, str):
             return _html("授权启动失败", "MailHub 响应缺少 authorization_url/state")

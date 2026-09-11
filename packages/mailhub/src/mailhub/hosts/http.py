@@ -1350,13 +1350,22 @@ class HttpApprovalAdapter(_HttpPortBase, ApprovalPort):
         return reference
 
     async def verify_confirmation(
-        self, *, confirmation_ref: str, action: AgentActionRequest
+        self,
+        *,
+        confirmation_ref: str,
+        action: AgentActionRequest,
+        approver_subject_id: str | None = None,
     ) -> bool:
-        _, payload = await self._json_request(
-            "POST",
-            self.verify_path,
-            {"confirmation_ref": confirmation_ref, "action": _action_json(action)},
-        )
+        body: dict[str, object] = {
+            "confirmation_ref": confirmation_ref,
+            "action": _action_json(action),
+        }
+        if approver_subject_id is not None:
+            # Sent only when the caller actually holds an approver identity, so
+            # the wire request stays byte-identical for hosts that have not
+            # adopted separation of duties.
+            body["approver_subject_id"] = approver_subject_id
+        _, payload = await self._json_request("POST", self.verify_path, body)
         verified = payload.get("verified")
         if not isinstance(verified, bool):
             raise ProviderFailureError("approval_response_invalid")

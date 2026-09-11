@@ -179,9 +179,7 @@ def redact_audit_fields(event: dict[str, object]) -> dict[str, object]:
             result[key] = value
         elif isinstance(value, (list, tuple)):
             result[key] = [
-                item
-                for item in value
-                if item is None or isinstance(item, (str, int, float, bool))
+                item for item in value if item is None or isinstance(item, (str, int, float, bool))
             ]
         elif isinstance(value, dict):
             result[key] = redact_audit_fields(
@@ -281,9 +279,7 @@ class LocalStores:
         except Exception as exc:  # noqa: BLE001 - bounded local fallback
             raise StoreError("object_store_decryption_failed", status_code=500) from exc
 
-    def delete_object(
-        self, *, tenant_id: str, subject_id: str, object_ref: str
-    ) -> None:
+    def delete_object(self, *, tenant_id: str, subject_id: str, object_ref: str) -> None:
         with self._connect() as db:
             db.execute(
                 "DELETE FROM host_objects WHERE object_ref=? AND tenant_id=? AND subject_id=?",
@@ -386,8 +382,17 @@ class LocalStores:
         return confirmation_ref
 
     def verify_approval(
-        self, *, confirmation_ref: str, action_id: str, action_digest: str
+        self,
+        *,
+        confirmation_ref: str,
+        action_id: str,
+        action_digest: str,
+        approver_subject_id: str | None = None,
     ) -> bool:
+        # Accepted so the wire contract is additive, not yet enforced: this
+        # reference host is single-principal, so separation of duties has to be
+        # configured before the check can mean anything.
+        del approver_subject_id
         with self._connect() as db:
             row = db.execute(
                 "SELECT action_id, action_digest FROM host_approvals WHERE confirmation_ref=?",
@@ -401,9 +406,7 @@ class LocalStores:
         # bound confirmations require both action id and digest to match.
         if not stored_id and not stored_digest:
             return True
-        return stored_id == action_id and hmac.compare_digest(
-            stored_digest, action_digest
-        )
+        return stored_id == action_id and hmac.compare_digest(stored_digest, action_digest)
 
     # ---- actions / knowledge -----------------------------------------------
 
@@ -623,9 +626,7 @@ class LocalStores:
                             now.isoformat(),
                         ),
                     )
-                db.execute(
-                    "DELETE FROM host_quota_leases WHERE lease_id=?", (lease_id,)
-                )
+                db.execute("DELETE FROM host_quota_leases WHERE lease_id=?", (lease_id,))
                 db.commit()
             except Exception:
                 db.rollback()
@@ -693,9 +694,7 @@ class LocalStores:
         try:
             password = self._fernet.decrypt(stored).decode("utf-8")
         except Exception as exc:  # noqa: BLE001 - bounded local fallback
-            raise StoreError(
-                "imap_credential_decryption_failed", status_code=500
-            ) from exc
+            raise StoreError("imap_credential_decryption_failed", status_code=500) from exc
         return {"username": str(row["username"]), "password": password}
 
     def rotate_imap_credential(
@@ -725,9 +724,9 @@ class LocalStores:
             if is_vault_pointer(stored):
                 if self._vault is None:
                     raise StoreError("imap_vault_not_configured", status_code=503)
-                replacement = self._vault.put_secret(
-                    name=credential_ref, value=password
-                ).encode("utf-8")
+                replacement = self._vault.put_secret(name=credential_ref, value=password).encode(
+                    "utf-8"
+                )
             else:
                 replacement = self._fernet.encrypt(password.encode("utf-8"))
             version = int(row["version"]) + 1

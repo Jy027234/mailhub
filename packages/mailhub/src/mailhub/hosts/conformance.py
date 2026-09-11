@@ -96,6 +96,17 @@ class ConformanceCheck:
     name: str
     passed: bool
     detail: str = ""
+    # Optional checks describe capability a host may legitimately not implement
+    # yet (four-eyes approval in a single-principal host, for example).  They
+    # are reported as not_implemented rather than failed, so "we did not prove
+    # it" never renders as "we proved it" and never as a silent pass either.
+    required: bool = True
+
+    @property
+    def status(self) -> str:
+        if self.passed:
+            return "passed"
+        return "failed" if self.required else "not_implemented"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +128,11 @@ class HostConformanceReport:
 
     @property
     def failures(self) -> tuple[ConformanceCheck, ...]:
-        return tuple(check for check in self.checks if not check.passed)
+        return tuple(check for check in self.checks if not check.passed and check.required)
+
+    @property
+    def not_implemented(self) -> tuple[ConformanceCheck, ...]:
+        return tuple(check for check in self.checks if not check.passed and not check.required)
 
     @property
     def passed(self) -> bool:
@@ -133,6 +148,8 @@ class HostConformanceReport:
                     "area": check.area,
                     "name": check.name,
                     "passed": check.passed,
+                    "required": check.required,
+                    "status": check.status,
                     "detail": check.detail,
                 }
                 for check in self.checks
@@ -142,6 +159,12 @@ class HostConformanceReport:
 
 def _check(area: str, name: str, passed: bool, detail: str = "") -> ConformanceCheck:
     return ConformanceCheck(area=area, name=name, passed=passed, detail=detail)
+
+
+def _check_optional(area: str, name: str, implemented: bool, detail: str = "") -> ConformanceCheck:
+    """A capability a host may not implement yet: reported, never inferred."""
+
+    return ConformanceCheck(area=area, name=name, passed=implemented, detail=detail, required=False)
 
 
 def _text(observation: Observation, key: str) -> str | None:
@@ -319,6 +342,11 @@ def check_approval(observations: Sequence[Observation]) -> list[ConformanceCheck
     typed = True
     stale_rejected = True
     valid_accept_observed = False
+    replay_rejected = True
+    replay_rejected_observed = False
+    four_eyes_declared = False
+    four_eyes_enforced = True
+    self_approval_rejected_observed = False
     for observation in observations:
         accepted = _flag(observation, "accepted")
         if accepted is None:
@@ -332,6 +360,18 @@ def check_approval(observations: Sequence[Observation]) -> list[ConformanceCheck
             stale_rejected = False
         if accepted and bound is True and not stale:
             valid_accept_observed = True
+        if _flag(observation, "four_eyes_required") is True:
+            four_eyes_declared = True
+        if _flag(observation, "replayed") is True:
+            if accepted:
+                replay_rejected = False
+            else:
+                replay_rejected_observed = True
+        if _flag(observation, "self_approved") is True:
+            if accepted:
+                four_eyes_enforced = False
+            else:
+                self_approval_rejected_observed = True
     checks.append(_check(area, "explicit_decision", typed, "accepted must be a JSON boolean"))
     checks.append(
         _check(
@@ -347,6 +387,50 @@ def check_approval(observations: Sequence[Observation]) -> list[ConformanceCheck
             "valid_confirmation_observed",
             valid_accept_observed,
             "record at least one correctly bound confirmation that was accepted",
+        )
+    )
+    # Reuse protection is unconditional: an approval that was already exercised
+    # must not authorise a second execution, whoever presents it.
+    checks.append(
+        _check(
+            area,
+            "replay_rejected",
+            replay_rejected,
+            "a confirmation that was already exercised must be refused on reuse",
+        )
+    )
+    if four_eyes_declared:
+        checks.append(
+            _check(
+                area,
+                "distinct_approver_enforced",
+                four_eyes_enforced,
+                "a host declaring four_eyes_required must refuse a self-approved confirmation",
+            )
+        )
+    else:
+        checks.append(
+            _check_optional(
+                area,
+                "distinct_approver_enforced",
+                False,
+                "host does not declare four_eyes_required, so separation of duties is unproven",
+            )
+        )
+    checks.append(
+        _check_optional(
+            area,
+            "self_approval_rejected_observed",
+            self_approval_rejected_observed,
+            "record a refused self-approval to prove the rule is exercised, not just stated",
+        )
+    )
+    checks.append(
+        _check_optional(
+            area,
+            "replay_rejected_observed",
+            replay_rejected_observed,
+            "record a refused reuse to prove the rule is exercised, not just stated",
         )
     )
     return checks
@@ -773,6 +857,24 @@ def sample_bundle(*, compliant: bool) -> HostConformanceBundle:
             "foreign_scope": False,
             "accepted": False,
         },
+        {
+            "confirmation_ref": "approve_4",
+            "bound": True,
+            "expired": False,
+            "foreign_scope": False,
+            "four_eyes_required": True,
+            "self_approved": True,
+            "accepted": False,
+        },
+        {
+            "confirmation_ref": "approve_4",
+            "bound": True,
+            "expired": False,
+            "foreign_scope": False,
+            "four_eyes_required": True,
+            "replayed": True,
+            "accepted": False,
+        },
     ]
     host_action: list[dict[str, Any]] = [
         {"action_id": "action-1", "attempt": 1, "executed": True, "result_ref": "task-1"},
@@ -836,7 +938,14 @@ def sample_bundle(*, compliant: bool) -> HostConformanceBundle:
             "returned_fields": ["access_token", "refresh_token"],
         },
     ]
-    broken_approval = [{**approval[1], "accepted": True}, approval[0]]
+    broken_approval = [
+        {**approval[1], "accepted": True},
+        approval[0],
+        # Declares four-eyes, then accepts both a self-approval and a reuse, so
+        # the new checks are proven able to fail rather than merely present.
+        {**approval[3], "accepted": True},
+        {**approval[4], "accepted": True},
+    ]
     broken_action = [host_action[0], {**host_action[1], "executed": True}]
     broken_knowledge = [knowledge[0], {**knowledge[1], "created": True}]
     broken_knowledge_safety = [
@@ -903,6 +1012,24 @@ def template_bundle() -> dict[str, Any]:
                     "bound": False,
                     "expired": False,
                     "foreign_scope": False,
+                    "accepted": False,
+                },
+                {
+                    "confirmation_ref": "approve_3",
+                    "bound": True,
+                    "expired": False,
+                    "foreign_scope": False,
+                    "four_eyes_required": True,
+                    "self_approved": True,
+                    "accepted": False,
+                },
+                {
+                    "confirmation_ref": "approve_3",
+                    "bound": True,
+                    "expired": False,
+                    "foreign_scope": False,
+                    "four_eyes_required": True,
+                    "replayed": True,
                     "accepted": False,
                 },
             ],

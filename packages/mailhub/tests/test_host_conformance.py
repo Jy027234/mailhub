@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from mailhub.hosts.conformance import (
     SCHEMA_VERSION,
+    ConformanceCheck,
     HostConformanceBundle,
+    HostConformanceReport,
     build_bundle,
     bundle_from_mapping,
     load_bundle,
@@ -180,3 +183,114 @@ def test_bundle_round_trips_through_json(tmp_path: Path) -> None:
 def test_malformed_bundles_fail_closed(payload: dict[str, object], code: str) -> None:
     with pytest.raises(ValueError, match=code):
         bundle_from_mapping(payload)
+
+
+def _check(report: HostConformanceReport, area: str, name: str) -> ConformanceCheck:
+    return next(item for item in report.checks if item.area == area and item.name == name)
+
+
+def _approval_bundle(observations: list[dict[str, object]]) -> HostConformanceBundle:
+    bundle = sample_bundle(compliant=True)
+    return replace(bundle, observations={**bundle.observations, "approval": observations})
+
+
+def test_declared_four_eyes_that_accepts_a_self_approval_fails() -> None:
+    """The check must have teeth, not merely exist."""
+
+    report = run_host_conformance(
+        _approval_bundle(
+            [
+                {
+                    "confirmation_ref": "a1",
+                    "bound": True,
+                    "expired": False,
+                    "foreign_scope": False,
+                    "four_eyes_required": True,
+                    "self_approved": True,
+                    "accepted": True,
+                }
+            ]
+        )
+    )
+    check = _check(report, "ApprovalPort", "distinct_approver_enforced")
+    assert check.status == "failed"
+    assert not report.passed
+
+
+def test_undeclared_four_eyes_is_not_implemented_not_passed() -> None:
+    """A host that has not adopted separation of duties must not read as compliant."""
+
+    report = run_host_conformance(
+        _approval_bundle(
+            [
+                {
+                    "confirmation_ref": "a1",
+                    "bound": True,
+                    "expired": False,
+                    "foreign_scope": False,
+                    "accepted": True,
+                }
+            ]
+        )
+    )
+    check = _check(report, "ApprovalPort", "distinct_approver_enforced")
+    assert check.status == "not_implemented"
+    assert check not in report.failures
+    assert check in report.not_implemented
+    assert report.passed
+
+
+def test_accepted_replay_fails() -> None:
+    report = run_host_conformance(
+        _approval_bundle(
+            [
+                {
+                    "confirmation_ref": "a1",
+                    "bound": True,
+                    "expired": False,
+                    "foreign_scope": False,
+                    "replayed": True,
+                    "accepted": True,
+                }
+            ]
+        )
+    )
+    check = _check(report, "ApprovalPort", "replay_rejected")
+    assert check.status == "failed"
+    assert not report.passed
+
+
+def test_compliant_sample_proves_both_new_rules() -> None:
+    report = run_host_conformance(sample_bundle(compliant=True))
+    for name in (
+        "replay_rejected",
+        "distinct_approver_enforced",
+        "self_approval_rejected_observed",
+        "replay_rejected_observed",
+    ):
+        assert _check(report, "ApprovalPort", name).status == "passed", name
+
+
+def test_report_serialises_the_three_way_status() -> None:
+    report = run_host_conformance(
+        _approval_bundle(
+            [
+                {
+                    "confirmation_ref": "a1",
+                    "bound": True,
+                    "expired": False,
+                    "foreign_scope": False,
+                    "accepted": True,
+                }
+            ]
+        )
+    )
+    serialised = report.to_dict()
+    statuses = {
+        item["name"]: item["status"]
+        for item in serialised["checks"]
+        if item["area"] == "ApprovalPort"
+    }
+    assert statuses["valid_confirmation_observed"] == "passed"
+    assert statuses["distinct_approver_enforced"] == "not_implemented"
+    assert serialised["passed"] is True

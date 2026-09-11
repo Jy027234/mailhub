@@ -1519,6 +1519,16 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    本次还修掉一个**会导致误判的缺陷**：账本存的是文件名词干，按字符串比较会把 `0016_x > 0016`，
    从而把回滚目标自身排除在期望集合外——已改为按数字前缀比较并加回归测试。
    证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。PITR/WAL 归档、备库切换、容量压测与真实故障注入仍开放。
+   **2026-09-11 四眼审批接口落地（加法式，方案 A）**：查证发现该语义缺失于**实现**而非文档——
+   `ports.py` 的 `ApprovalPort.verify_confirmation` 无审批人身份参数；一致性套件不检查职责分离与重放；
+   `local-host/stores.py::verify_approval` 有 fail-open 旁路（绑定字段为空时对任意 action 返回 True）
+   且审批行从不标记已消费。本次：新增**可选** `approver_subject_id`（缺省行为不变，下游无需改造）；
+   核心在提交确认处传主体身份、在发信前再校验处传 `None` 并注明非新批准行为；`HttpApprovalAdapter`
+   仅在非空时放入请求体；一致性套件新增 `replay_rejected`（必检）、`distinct_approver_enforced`
+   （宿主声明 `four_eyes_required` 时必检）与两项证据检查，并引入 **`not_implemented` 第三态**，
+   未声明四眼者被判"未实现"而非通过。测试：一致性套件 20 项（+5，含"声明后自批必须失败"
+   与"未声明必须判未实现"两条活性用例）。仍在开放：审批人身份未持久化到 outbox operation（需加列 + 迁移），
+   故发信前再校验无法重新断言四眼；`local-host` 的四眼强制、一次性消费与 fail-open 修复待做。
 
    **2026-08-19 生产 Secret 后端（Vault KV v2）已实测**：参考宿主新增
    `local-host/local_host/vault.py` + `HOST_VAULT_ADDR/TOKEN/MOUNT/PREFIX`；
