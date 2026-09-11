@@ -1,10 +1,11 @@
 {
   "schema": "mailhub.external_review_pack_check.v1",
-  "recorded_at": "2026-09-11T19:53:16.252766+00:00",
+  "recorded_at": "2026-09-11T19:54:35.159389+00:00",
   "pack": "packages\\mailhub\\docs\\external-review-pack.yaml",
   "entries": [
     {
       "id": "MAIL-SEC-001",
+      "kind": "external_review",
       "owner": "security",
       "title": "OAuth state/nonce/PKCE, redirect URI, CSRF and token rotation penetration test",
       "status": "blocked_on_external",
@@ -16,6 +17,7 @@
     },
     {
       "id": "MAIL-SEC-002",
+      "kind": "external_review",
       "owner": "security",
       "title": "Negative authorisation matrix across tenant, user, account, folder, object, vector and trace",
       "status": "blocked_on_external",
@@ -27,6 +29,7 @@
     },
     {
       "id": "MAIL-SEC-003",
+      "kind": "external_review",
       "owner": "security",
       "title": "HTML XSS, tracking pixel, SSRF, MIME confusion and hostile attachment handling",
       "status": "blocked_on_external",
@@ -38,6 +41,7 @@
     },
     {
       "id": "MAIL-SEC-004",
+      "kind": "external_review",
       "owner": "security",
       "title": "Secret, body and PII scanning across logs, traces, metrics, errors, analytics, backups and dead letters",
       "status": "evidence_ready",
@@ -48,6 +52,7 @@
     },
     {
       "id": "MAIL-SEC-005",
+      "kind": "external_review",
       "owner": "security",
       "title": "Connection revocation, account deletion, export, TTL cleanup and deletion proof",
       "status": "evidence_ready",
@@ -58,6 +63,7 @@
     },
     {
       "id": "MAIL-SEC-006",
+      "kind": "external_review",
       "owner": "privacy",
       "title": "PIPL/GDPR, provider terms, cross-border transfer, processors and user consent review",
       "status": "not_started",
@@ -68,6 +74,7 @@
     },
     {
       "id": "MAIL-SEC-007",
+      "kind": "external_review",
       "owner": "security",
       "title": "Dependency, image, SDK, SBOM, signature, vulnerability, supply chain and licence gates",
       "status": "evidence_ready",
@@ -78,6 +85,7 @@
     },
     {
       "id": "MAIL-OPS-001",
+      "kind": "external_review",
       "owner": "sre",
       "title": "SLO, alerting, on-call and incident runbooks for provider outage, credential leak, mis-send, knowledge pollution and cross-tenant events",
       "status": "not_started",
@@ -88,6 +96,7 @@
     },
     {
       "id": "MAIL-OPS-002",
+      "kind": "external_review",
       "owner": "sre",
       "title": "Backup, restore, PITR and object lifecycle drill with measured RPO and RTO",
       "status": "evidence_ready",
@@ -98,6 +107,7 @@
     },
     {
       "id": "MAIL-OPS-003",
+      "kind": "external_review",
       "owner": "sre",
       "title": "Fault injection for webhook gaps, invalid cursors, 429/5xx, DNS and network loss, worker kill, lease expiry and database failover",
       "status": "evidence_ready",
@@ -108,6 +118,7 @@
     },
     {
       "id": "MAIL-OPS-004",
+      "kind": "external_review",
       "owner": "sre",
       "title": "Capacity test across accounts, messages per day, long threads, large attachments, search, AI queue and provider quotas",
       "status": "evidence_ready",
@@ -118,6 +129,7 @@
     },
     {
       "id": "MAIL-OPS-005",
+      "kind": "external_review",
       "owner": "sre",
       "title": "Cost dashboard for provider API, object storage, parsing, OCR, model tokens, cost per thousand messages and budget blocking",
       "status": "not_started",
@@ -128,6 +140,7 @@
     },
     {
       "id": "MAIL-OPS-006",
+      "kind": "external_review",
       "owner": "sre",
       "title": "Tenant, provider and global kill switches with four-eyes change control and audit",
       "status": "blocked_on_external",
@@ -138,6 +151,7 @@
     },
     {
       "id": "MAIL-REL-001",
+      "kind": "external_review",
       "owner": "release",
       "title": "Internal test users only, controlled provider test accounts",
       "status": "blocked_on_external",
@@ -148,6 +162,7 @@
     },
     {
       "id": "MAIL-REL-006",
+      "kind": "external_review",
       "owner": "release",
       "title": "Second host completes the same read and candidate end-to-end path, proving core portability",
       "status": "blocked_on_external",
@@ -158,6 +173,7 @@
     },
     {
       "id": "MAIL-REL-007",
+      "kind": "external_review",
       "owner": "release",
       "title": "Thirty consecutive days at SLO with no data leak, double send or duplicate task",
       "status": "blocked_on_external",
@@ -168,6 +184,7 @@
     },
     {
       "id": "MAIL-REL-008",
+      "kind": "external_review",
       "owner": "release",
       "title": "Production security, privacy, provider verification, data residency and licence approval",
       "status": "blocked_on_external",
@@ -178,6 +195,7 @@
     },
     {
       "id": "MAIL-REL-009",
+      "kind": "external_review",
       "owner": "release",
       "title": "GA compatibility matrix, known limitations, migration and rollback, support policy and roadmap",
       "status": "blocked_on_external",
@@ -188,6 +206,7 @@
     },
     {
       "id": "MAIL-REL-011",
+      "kind": "external_review",
       "owner": "release",
       "title": "Shadow, cutover, rollback and cleanup evidence for MX, with infrastructure and business ownership stated separately",
       "status": "blocked_on_external",
@@ -195,15 +214,106 @@
       "reviewer_actions": [
         "Run on the real legacy module; the fixture drill is explicitly not a customer migration."
       ]
+    },
+    {
+      "id": "MAIL-UX-010-SCREEN-READER",
+      "kind": "manual_verification",
+      "owner": "accessibility",
+      "title": "Screen reader pass over the workspace with NVDA or VoiceOver",
+      "status": "blocked_on_external",
+      "evidence_count": 2,
+      "reviewer_actions": [
+        "Drive the workspace with a screen reader; a test runner cannot assert speech output."
+      ]
+    },
+    {
+      "id": "MAIL-UX-010-NON-TEXT-CONTRAST",
+      "kind": "manual_verification",
+      "owner": "accessibility",
+      "title": "Non-text contrast of focus rings and borders (WCAG 1.4.11)",
+      "status": "blocked_on_external",
+      "evidence_count": 2,
+      "reviewer_actions": [
+        "Inspect the focus indicator on every control; axe only covers text contrast."
+      ]
+    },
+    {
+      "id": "MAIL-UX-010-FORCED-COLORS",
+      "kind": "manual_verification",
+      "owner": "accessibility",
+      "title": "Windows high contrast and forced-colors behaviour",
+      "status": "blocked_on_external",
+      "evidence_count": 1,
+      "reviewer_actions": [
+        "Walk the UI with the OS high contrast theme enabled on a real desktop."
+      ]
+    },
+    {
+      "id": "MAIL-UX-010-ZOOM",
+      "kind": "manual_verification",
+      "owner": "accessibility",
+      "title": "Real 200% browser zoom behaviour",
+      "status": "blocked_on_external",
+      "evidence_count": 1,
+      "reviewer_actions": [
+        "Use the browser's own zoom rather than the 640 CSS px viewport used as a proxy."
+      ]
+    },
+    {
+      "id": "MAIL-UX-010-SLOW-NETWORK",
+      "kind": "manual_verification",
+      "owner": "accessibility",
+      "title": "Behaviour on a slow or interrupted network",
+      "status": "not_started",
+      "evidence_count": 0,
+      "reviewer_actions": [
+        "Throttle the host API and confirm loading, empty and error states remain usable."
+      ]
+    },
+    {
+      "id": "MAIL-IMAP-005-EXCHANGE",
+      "kind": "manual_verification",
+      "owner": "provider",
+      "title": "Self-hosted Exchange row of the server compatibility matrix",
+      "status": "blocked_on_external",
+      "evidence_count": 2,
+      "reviewer_actions": [
+        "Provide a Windows Server with Exchange, or an Exchange Online tenant, and run the read-only probe."
+      ]
+    },
+    {
+      "id": "MAIL-ADOPT-011-ADOPTER",
+      "kind": "manual_verification",
+      "owner": "release",
+      "title": "Shadow, cutover and rollback on a real second product's mail module",
+      "status": "blocked_on_external",
+      "evidence_count": 2,
+      "reviewer_actions": [
+        "Run on the real legacy module; the drill proves the kit against a labelled fixture only."
+      ]
+    },
+    {
+      "id": "MAIL-SMTP-163-CLEANUP",
+      "kind": "manual_verification",
+      "owner": "owner",
+      "title": "Remove the self-addressed round-trip probe messages from the 163 mailbox",
+      "status": "blocked_on_external",
+      "evidence_count": 1,
+      "reviewer_actions": [
+        "Decide whether to delete them; every probe in this repository is read-only by design and cannot."
+      ]
     }
   ],
   "counts": {
-    "not_started": 3,
-    "blocked_on_external": 10,
+    "not_started": 4,
+    "blocked_on_external": 17,
     "evidence_ready": 6,
-    "signed_off": 0
+    "signed_off": 0,
+    "kind:external_review": 19,
+    "kind:manual_verification": 8
   },
   "signed": 0,
+  "still_manual": 21,
   "issues": [],
   "passed": true
 }

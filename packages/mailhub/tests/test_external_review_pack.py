@@ -37,6 +37,7 @@ REAL_EVIDENCE = "packages/mailhub/README.md"
 def _entry(identifier: str, **overrides: Any) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "id": identifier,
+        "kind": "external_review",
         "owner": "security",
         "title": "something a human must review",
         "status": "not_started",
@@ -119,6 +120,11 @@ def test_not_started_with_evidence_is_rejected() -> None:
     assert "MAIL-SEC-001:not_started_but_lists_evidence" in issues
 
 
+def test_an_unknown_kind_is_rejected() -> None:
+    issues, _ = CHECK.check_pack(_full_pack(kind="something_else"))
+    assert "MAIL-SEC-001:unknown_kind:something_else" in issues
+
+
 def test_the_real_pack_obeys_every_rule() -> None:
     loaded = yaml.safe_load(CHECK.PACK.read_text(encoding="utf-8"))
     issues, summaries = CHECK.check_pack(loaded)
@@ -131,3 +137,9 @@ def test_the_real_pack_obeys_every_rule() -> None:
     assert counts["evidence_ready"] + counts["blocked_on_external"] + counts["not_started"] == len(
         CHECK.REQUIRED_IDS
     )
+    # Both families are present: a review somebody performs, and a verification
+    # only a human or a real environment can carry out.
+    assert counts["kind:external_review"] > 0
+    assert counts["kind:manual_verification"] > 0
+    assert "MAIL-UX-010-SCREEN-READER" in {entry["id"] for entry in summaries}
+    assert "MAIL-SMTP-163-CLEANUP" in {entry["id"] for entry in summaries}

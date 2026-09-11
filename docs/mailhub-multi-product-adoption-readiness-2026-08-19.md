@@ -174,7 +174,38 @@
 - `MAIL-ADOPT-004`/`MAIL-ADOPT-005` 待做：完整参考宿主与 Port 级 conformance kit 可执行入口
   （现有 `src/mailhub/connectors/conformance.py` 只覆盖 connector，未覆盖 Host Port）。
 
-## 6. 边界（不做什么）
+## 6. 必须由人工完成的项目（机器可校验登记表）
+
+以下项目**本仓库的工具链无法完成**：它们依赖屏幕阅读器、操作系统设置、真实 Exchange 环境或真实采用方。
+逐项登记在 `packages/mailhub/docs/external-review-pack.yaml`，并由发布门禁 `external-review-pack`
+（`scripts/check_external_review_pack.py`）强制校验——所以它们**被列出而不是被悄悄丢掉**。
+
+登记表分两类共 **27 项**：19 项外部评审（`kind: external_review`）与 8 项人工验证（`kind: manual_verification`）。
+门禁当前如实输出：
+
+```
+27 items: 19 external reviews + 8 manual verifications;
+6 evidence_ready, 17 blocked_on_external, 4 not_started, 0 signed
+note: no external review has been signed; this pack only records what a reviewer can read today
+```
+
+人工验证的 8 项：
+
+| ID | 内容 | 为什么机器做不了 |
+| --- | --- | --- |
+| `MAIL-UX-010-SCREEN-READER` | NVDA/VoiceOver 实机朗读 | 测试运行器无法断言语音输出 |
+| `MAIL-UX-010-NON-TEXT-CONTRAST` | 焦点框/边框非文本对比度（1.4.11） | axe 只覆盖文本对比度 |
+| `MAIL-UX-010-FORCED-COLORS` | Windows 高对比度 / `forced-colors` | 需真实桌面系统设置 |
+| `MAIL-UX-010-ZOOM` | 真实 200% 浏览器缩放 | 现以 640 CSS px 视口作等效代理 |
+| `MAIL-UX-010-SLOW-NETWORK` | 慢网/断网下的加载、空态与错误态 | 需真实网络条件 |
+| `MAIL-IMAP-005-EXCHANGE` | 自建 Exchange 行 | 无容器镜像、非可容器化形态（见 `provider-compatibility.yaml` 的 `blocked_by_environment`） |
+| `MAIL-ADOPT-011-ADOPTER` | 真实第二产品的 shadow→cutover→回滚 | 仓库内没有第二个真实产品可迁；现有演练对端是**已标注的夹具** |
+| `MAIL-SMTP-163-CLEANUP` | 清理 163 邮箱里的自测邮件 | 现有工具链**全部只读设计**；删除需所有者决定 |
+
+门禁的防自欺规则：没有具名签署人与日期不得声称已签署；声明阻塞必须写清评审人该做什么；
+声称有证据必须列出且文件必须存在；`not_started` 不得列证据；必需条目集合不得缩小。
+
+## 7. 边界（不做什么）
 
 - 不把 CAPlatform 回接工作混入本清单；两者独立记账。
 - 不为通过门禁而删除既有 connector（Gmail/Graph 保留代码，仅摘出国内发布阻断门，见 `provider-compatibility.yaml`）。

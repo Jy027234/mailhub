@@ -56,7 +56,20 @@ REQUIRED_IDS: tuple[str, ...] = (
     "MAIL-REL-008",
     "MAIL-REL-009",
     "MAIL-REL-011",
+    "MAIL-UX-010-SCREEN-READER",
+    "MAIL-UX-010-NON-TEXT-CONTRAST",
+    "MAIL-UX-010-FORCED-COLORS",
+    "MAIL-UX-010-ZOOM",
+    "MAIL-UX-010-SLOW-NETWORK",
+    "MAIL-IMAP-005-EXCHANGE",
+    "MAIL-ADOPT-011-ADOPTER",
+    "MAIL-SMTP-163-CLEANUP",
 )
+
+#: A review somebody else performs, or a verification only a human or a real
+#: environment can carry out.  Both belong here: the risk is the same, that a
+#: reader mistakes what is registered for what is done.
+KINDS = ("external_review", "manual_verification")
 
 STATUSES = ("not_started", "blocked_on_external", "evidence_ready", "signed_off")
 _DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
@@ -93,6 +106,11 @@ def check_pack(pack: Mapping[str, Any]) -> tuple[list[str], list[dict[str, Any]]
             continue
         seen.add(identifier)
 
+        kind = str(entry.get("kind", ""))
+        if kind not in KINDS:
+            issues.append(identifier + ":unknown_kind:" + kind)
+            continue
+
         status = str(entry.get("status", ""))
         if status not in STATUSES:
             issues.append(identifier + ":unknown_status:" + status)
@@ -128,6 +146,7 @@ def check_pack(pack: Mapping[str, Any]) -> tuple[list[str], list[dict[str, Any]]
         summaries.append(
             {
                 "id": identifier,
+                "kind": kind,
                 "owner": str(entry.get("owner", "")),
                 "title": str(entry.get("title", "")),
                 "status": status,
@@ -146,6 +165,8 @@ def summarise(summaries: Sequence[Mapping[str, Any]]) -> dict[str, int]:
     counts = dict.fromkeys(STATUSES, 0)
     for entry in summaries:
         counts[str(entry["status"])] += 1
+    for kind in KINDS:
+        counts["kind:" + kind] = sum(1 for entry in summaries if entry.get("kind") == kind)
     return counts
 
 
@@ -172,6 +193,7 @@ def main() -> int:
         "entries": summaries,
         "counts": counts,
         "signed": counts["signed_off"],
+        "still_manual": counts["blocked_on_external"] + counts["not_started"],
         "issues": issues,
         "passed": not issues,
     }
@@ -190,6 +212,10 @@ def main() -> int:
         "external-review-pack: ok ("
         + str(len(summaries))
         + " items: "
+        + str(counts["kind:external_review"])
+        + " external reviews + "
+        + str(counts["kind:manual_verification"])
+        + " manual verifications; "
         + str(counts["evidence_ready"])
         + " evidence_ready, "
         + str(counts["blocked_on_external"])
