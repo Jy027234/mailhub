@@ -90,7 +90,7 @@
 | ID | 现状 | 缺口 | 验收条件 |
 | --- | --- | --- | --- |
 | `MAIL-ADOPT-010` | ✅ **已完成（2026-08-19）**：`src/i18n.ts` 定义 53 键 `MailHubMessages` + `zh-CN`/`en-US` 内置包；`locale`/`messages` 可注入（部分覆盖或完整语言包）；`npm run build` 内置三道门禁（CJK 残留扫描 / 占位符完整性 / 双语言包键集一致），实测 `locale gate: ok (53 keys)` | 剩余：复数规则（当前为简单插值，已在文档标注由宿主覆盖）、RTL 评估 | 至少两种 locale 切换且无硬编码残留（已达成） |
-| `MAIL-UX-011` | ⚠️ **语义半程完成（2026-08-19）**：新增 `src/a11y.test.tsx`（jsdom + axe-core + Testing Library，10 用例）；实现真 ARIA tab 组件（roving tabindex + 方向键/Home/End）、筛选改 `aria-pressed` 切换按钮、`headingLevel` 注入（standalone 默认 h2 → 单一 h1）、门禁活性自证用例；`build_release.py` 现将 Node 包测试纳入发布门禁（`ui-tests`/`typescript-sdk-tests`） | 剩余（须真实浏览器）：颜色对比度 1.4.3/1.4.11、目标尺寸 2.5.8、回流缩放 1.4.10、动效复验 2.3.3、屏幕阅读器实机走查、CSP 基线 | 浏览器审计报告 + 修复闭环 |
+| `MAIL-UX-010` | ⚠️ **渲染半程完成（2026-09-11）**：语义半程 `ui/src/a11y.test.tsx`（jsdom + axe-core + Testing Library，10 用例；真 ARIA tab、`aria-pressed` 筛选、`headingLevel` 注入、门禁活性自证）；渲染半程 `ui/src/a11y.browser.test.tsx`（Vitest browser mode + Playwright Chromium，17 用例），实测：对比度 1.4.3/1.4.11 五视图 0 违规且 0 `incomplete`（每视图实测 12–22 个元素）、回流 1.4.10（320 CSS px 无横向滚动且双列塌缩为单列）、缩放 1.4.4（640 CSS px 无横向滚动）、目标尺寸 2.5.8（最小短边 26.0 CSS px）、动效 2.3.3（CDP 模拟 `reduce` 后 3s 内联 transition 被压到 `1e-05s`）、CSP 基线（无 `theme` 时零内联 `style` 属性）；报告 `docs/reports/mailhub-ui-browser-a11y-2026-09-11.md`；发布门禁新增 `ui-browser-a11y`（`scripts/check_ui_browser_a11y.py`，反读实测值并禁止 npm/node_modules/浏览器缺失静默跳过，另加 11 个单元测试）。注：本文档此前把该项误标为 `MAIL-UX-011`（与主待办的功能项撞名），现更正为 `MAIL-UX-010` | 剩余：屏幕阅读器实机走查（NVDA/VoiceOver）、1.4.11 非文本对比度目视（焦点框/边框）、系统级高对比度模式、真实 200% UA 缩放复核 | 浏览器审计报告 + 修复闭环（报告已出，人工走查待补） |
 | `MAIL-DIST-004` | 无独立可部署 UI shell | standalone shell 的打包与托管方案 | 可独立部署并被宿主嵌入 |
 
 ### 3.7 安全、合规与运维（"敢上线"）
@@ -117,7 +117,7 @@
 | 1 | `MAIL-ADOPT-002/003` 中性命名 + 许可决策 | 不改这个，任何发布都无处落地 | 阻断 |
 | 2 | `MAIL-ADOPT-001` + `MAIL-DIST-001/003/004` 发布流水线与产物 | "能被装上"的唯一路径 | 阻断 |
 | 3 | `MAIL-ADOPT-004/005/006` 参考宿主 + conformance kit + quickstart | 决定别的产品"接得动"还是"接不动" | 阻断 |
-| 4 | `MAIL-ADOPT-010` + `MAIL-UX-011` UI i18n + WCAG | 嵌入型产品的前置 | 高 |
+| 4 | `MAIL-ADOPT-010` + `MAIL-UX-010` UI i18n + WCAG | 嵌入型产品的前置 | 高 |
 | 5 | `MAIL-ADOPT-007/008` 完整 Helm + 生产 Secret 后端 | 决定"能不能上生产" | 高 |
 | 6 | `MAIL-IMAP-005`、`MAIL-SMTP-001/002`、附件 AV/DLP | 国内主路径真实证据 | 高 |
 | 7 | `MAIL-SEC-*`、`MAIL-OPS-*`、`MAIL-REL-*` | 上线审批 | 中 |

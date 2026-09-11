@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "check:locales": "node scripts/check-locales.mjs",
     "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "build": "tsc -p tsconfig.json && node scripts/check-locales.mjs"
   },
   "main": "./dist/index.js",
@@ -29,8 +30,11 @@
     "@testing-library/react": "^16.3.3",
     "@types/react": ">=18",
     "@types/react-dom": "^19.3.0",
+    "@vitest/browser": "^5.0.0",
+    "@vitest/browser-playwright": "^5.0.0",
     "axe-core": "^4.13.0",
     "jsdom": "^29.1.1",
+    "playwright": "^1.63.0",
     "react-dom": "^19.3.0",
     "typescript": ">=5.7",
     "vitest": "^5.0.0"

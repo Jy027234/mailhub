@@ -13,3 +13,6 @@ build/
 # DeepSeek Harness checkout lives inside the workspace but is not part of the
 # MailHub archive repository.
 deepseek-harness/
+
+# Vitest browser-mode attachments (failure screenshots) are run output.
+.vitest/

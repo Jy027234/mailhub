@@ -1556,7 +1556,16 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
 - [ ] **MAIL-UX-009（P1/MH+CAP）**：发布 standalone shell 和可嵌入 React 包；CAPlatform adapter 使用自身路由/主题，不 Fork UI。
   已新增 `packages/mailhub/ui` 可嵌入源包（client/theme/router 注入）、`MailHubStandalone` shell 和 CAPlatform 自有 `/mail` 页面；正式签名发布、版本 registry、宿主主题/路由和 WCAG 验收仍开放。
 - [ ] **MAIL-UX-010（P1/MH）**：完成 WCAG 2.2 AA、键盘、焦点、屏幕阅读器、窄屏和慢/空/错测试。
-  可嵌入 UI 与 CAPlatform 页面已补 tab/ARIA、focus-visible、窄屏 grid、空/错/加载状态基线；正式 WCAG 2.2 AA 审计和屏幕阅读器/慢网证据仍开放。
+  可嵌入 UI 与 CAPlatform 页面已补 tab/ARIA、focus-visible、窄屏 grid、空/错/加载状态基线。
+  **2026-09-11 渲染半程已闭环**：`ui/src/a11y.browser.test.tsx`（Vitest browser mode + Playwright
+  Chromium，17 用例）实测对比度 1.4.3/1.4.11（五视图 0 违规、0 `incomplete`，每视图实测 12–22 个元素）、
+  回流 1.4.10（320 CSS px 无横向滚动且双列塌缩为单列）、缩放 1.4.4（640 CSS px 无横向滚动）、
+  目标尺寸 2.5.8（最小短边 26.0 CSS px）、动效 2.3.3（CDP 模拟 `reduce` 后 3s 内联 transition 被压到
+  `1e-05s`）、CSP 基线（无 `theme` 时零内联 `style`）；报告
+  `docs/reports/mailhub-ui-browser-a11y-2026-09-11.md`；发布门禁新增 `ui-browser-a11y`
+  （`scripts/check_ui_browser_a11y.py`，反读实测值并禁止 npm/node_modules/浏览器缺失静默跳过）。
+  **仍开放**：屏幕阅读器实机走查（NVDA/VoiceOver）、1.4.11 非文本对比度目视（焦点框/边框）、
+  系统级高对比度模式、真实 200% UA 缩放复核、慢网证据。
 - [ ] **MAIL-UX-011（P2/MH）**：提供可配置重点收件箱、稍后处理、固定、静音和保存搜索；状态与 Provider 能力显式区分。
 
 验收：用户不看日志即可判断邮件是否完整同步、为何未显示、当前权限和下一步；多账号不会混淆发件身份。

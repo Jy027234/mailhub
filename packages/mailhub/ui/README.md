@@ -57,7 +57,14 @@ import { MailHubStandalone } from "@fyjtech/mailhub-ui/standalone";
 
 ## 可访问性（WCAG 2.2 AA）
 
-`npm test` 是**无头语义门禁**（jsdom + axe-core + Testing Library），10 个用例覆盖：
+可访问性门禁分两半，缺一不可：
+
+```bash
+npm test              # 语义半程：jsdom + axe-core + Testing Library（10 用例）
+npm run test:browser  # 渲染半程：Playwright Chromium（15 用例）
+```
+
+### 语义半程：`npm test`（jsdom，无布局引擎）
 
 | 已覆盖 | 相关准则 |
 | --- | --- |
@@ -69,17 +76,42 @@ import { MailHubStandalone } from "@fyjtech/mailhub-ui/standalone";
 | 筛选语义：`aria-pressed` 切换按钮，不再冒充 tab | 4.1.2 |
 | 门禁活性自证：故意渲染违规元素并要求 axe 报出 | —（防止门禁空转） |
 
-**未覆盖，必须做浏览器审计**：
+### 渲染半程：`npm run test:browser`（真实 Chromium）
+
+jsdom 没有布局引擎，对比度、目标尺寸、回流与动效只能在真实浏览器里证明。该套件加载**实际发布的
+`src/styles.css`**，每条准则都配一个能真失败的断言：
+
+| 准则 | 断言 | 证据形式 |
+| --- | --- | --- |
+| 1.4.3 / 1.4.11 文本对比度 | axe `color-contrast`（三视图 + 英文包 + standalone）零违规，且零 `incomplete` | axe 对真实像素取值 |
+| 1.4.10 回流 | 320 CSS px 视口下 `scrollWidth - clientWidth <= 0`，且收件箱由双列塌缩为单列 | 真实视口 + 计算样式 |
+| 1.4.4 缩放 | 640 CSS px 视口（1280 的 200%）无横向滚动 | 真实视口 |
+| 2.5.8 目标尺寸 | 三视图内全部控件 `min(width, height) >= 24`，并打印实测最小值 | 布局像素 |
+| 2.3.3 动效 | 默认媒体下整棵树 transition/animation 时长全为 0；CDP 模拟 `prefers-reduced-motion: reduce` 后，人为写入的 `transition-duration: 3s` 被样式表的 `!important` 压制为 `0.00001s` | 计算样式 |
+| CSP 基线 | 未传 `theme` 时渲染树内无任何 `style` 属性，且组件不注入 `<script>` | DOM 检查 |
+| 3.1.1 页面语言 | 移除 `<html lang>` 后 axe 必须报出 `html-has-lang` | 门禁活性自证 |
+
+活性自证：对比度与目标尺寸各有一个**故意失败**的探针用例。若 axe 规则被关掉、或标签集变更导致
+某条规则不再运行，这两个探针会先失败，而不是让套件"全绿"通过。
+
+**仍未覆盖（必须人工）**：
 
 | 未覆盖 | 原因 |
 | --- | --- |
-| 颜色对比度（1.4.3、1.4.11） | jsdom 无布局与层叠，测不出真实渲染色 |
-| 目标尺寸（2.5.8）、回流/缩放 200–400%（1.4.10） | 需要真实视口 |
-| 动效（2.3.3） | 样式已含 `prefers-reduced-motion`，仍需浏览器复验 |
-| 屏幕阅读器实机朗读 | 需 NVDA/VoiceOver 人工走查 |
+| 屏幕阅读器实机朗读 | 需 NVDA / VoiceOver 人工走查；测试运行器无法断言语音输出 |
+| 1.4.11 非文本对比度（焦点框、边框） | axe 只覆盖文本对比度；焦点指示器的几何与配色仍需人工目视 |
+| 系统级高对比度（Windows HC / `forced-colors`） | 需真实系统设置，无法在无头浏览器中复现 |
 
-因此：**"无头门禁通过"不等于 WCAG 2.2 AA 认证通过**，它只证明"语义 + 键盘"这一半。
-对比度与缩放必须在真实浏览器里过一遍，别把 CI 绿灯当成无障碍合规。
+因此：**"两半门禁通过"不等于 WCAG 2.2 AA 认证通过**。它证明的是"语义 + 键盘 + 渲染 + 动效"，
+不含屏幕阅读器实机与系统级高对比度。
+
+**宿主页义务**（组件不负责；审计按"宿主已履行"的前提进行）：
+
+| 义务 | 说明 |
+| --- | --- |
+| `<html lang>`、landmark、跳转链接 | axe 的 `html-has-lang`、`bypass` 属于宿主文档而非组件 |
+| 页面底色 | 组件自身不绘制页面背景；对比度按宿主白底测量 |
+| 严格 CSP | 未传 `theme` 时组件不产生内联样式，可直接用 `style-src 'self'`；一旦传 `theme`，`--mailhub-*` 会以 `style` 属性输出，此时宿主必须放行内联样式，或改在宿主样式表里覆盖同名变量 |
 
 安全边界：列表/线程默认只渲染 metadata；正文由 client 的 `getMessageContent` 按需返回纯文本；
 统一收件箱 API 使用 scope-bound cursor，支持未读/重要/附件/项目/候选和账号筛选；组件提供对应筛选按钮、

@@ -128,6 +128,10 @@ def run_gates(report: ReleaseReport, mode: str) -> None:
         # Renders the release chart and asserts its fail-closed properties; a
         # missing helm is a failure, never a silent skip.
         ("helm-chart", [python, "scripts/check_helm_chart.py"]),
+        # Contrast, target size, reflow and reduced-motion need a layout engine,
+        # so this runs the UI in headless Chromium.  A missing npm, node_modules
+        # or Playwright browser is a failure, never a silent skip.
+        ("ui-browser-a11y", [python, "scripts/check_ui_browser_a11y.py"]),
     ]
     for name, command in gate_commands:
         code, output = _run(command, cwd=PACKAGE_ROOT)

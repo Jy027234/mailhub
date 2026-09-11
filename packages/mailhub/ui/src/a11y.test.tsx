@@ -4,87 +4,21 @@
  * jsdom has no layout engine, so this suite proves roles, accessible names,
  * ARIA wiring, heading order, keyboard operability and live regions.  Colour
  * contrast, target size, reflow/zoom and motion are explicitly out of scope
- * here and must be checked in a browser — see the coverage table in README.md.
+ * here and must be checked in a browser — see the coverage table in README.md
+ * and the rendering half in `a11y.browser.test.tsx`.
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { MailHubWorkspace, type MailHubUiClient, type MailHubUiThread } from "./index.js";
+import { fakeClient } from "./a11y.fixtures.js";
+import { MailHubWorkspace } from "./index.js";
 import { MailHubStandalone } from "./standalone.js";
 
 // vitest runs without globals here, so Testing Library cannot register its own
 // auto-cleanup; unmounting explicitly keeps each assertion on one document.
 afterEach(cleanup);
-
-const THREADS: MailHubUiThread[] = [
-  {
-    thread_id: "thread-1",
-    connection_id: "connection-1",
-    account_email: "ops@example.test",
-    normalized_subject: "Delivery schedule",
-    participant_addresses: ["buyer@example.test"],
-    latest_at: "2026-08-19T08:00:00Z",
-    message_count: 2,
-    revision: 1,
-    unread: true,
-    has_attachment: true,
-  },
-];
-
-function fakeClient(overrides: Partial<MailHubUiClient> = {}): MailHubUiClient {
-  const base: MailHubUiClient = {
-    listConnections: async () => [
-      {
-        connection_id: "connection-1",
-        provider: "imap_smtp",
-        email_address: "ops@example.test",
-        status: "active",
-        revision: 3,
-        granted_scopes: ["mail.read"],
-        content_mode: "bounded_processing",
-        sync_state: "healthy",
-        last_sync_at: "2026-08-19T07:00:00Z",
-      },
-    ],
-    listThreads: async () => THREADS,
-    listThreadPage: async () => ({ data: THREADS, next_cursor: null, has_more: false }),
-    getThread: async () => ({
-      thread: THREADS[0],
-      messages: [
-        {
-          message_id: "message-1",
-          thread_id: "thread-1",
-          sender_address: "buyer@example.test",
-          recipient_addresses: ["ops@example.test"],
-          subject: "Delivery schedule",
-          received_at: "2026-08-19T08:00:00Z",
-        },
-      ],
-      content_policy: "metadata_only",
-    }),
-    getMessageContent: async () => "Quoted delivery window.",
-    listCandidates: async () => [
-      {
-        candidate_id: "candidate-1",
-        candidate_type: "task",
-        state: "proposed",
-        revision: 2,
-        title: "Confirm delivery date",
-        summary: "Supplier proposed a new window.",
-        confidence: 0.7,
-      },
-    ],
-    reviewCandidate: async () => ({}),
-    enqueueSync: async () => ({}),
-    createDraft: async () => {
-      throw new Error("createDraft is not used by the workspace tests");
-    },
-    sendDraft: async () => ({}),
-  };
-  return { ...base, ...overrides };
-}
 
 async function violations(container: HTMLElement): Promise<string[]> {
   const results = await axe.run(container, {
