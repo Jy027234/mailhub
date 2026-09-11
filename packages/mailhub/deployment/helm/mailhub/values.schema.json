@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mailhub chart values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["image", "runtime", "providers", "externalSecret", "api"],
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "commonLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "digest"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "immutable image digest; tags are refused"
+        },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "type": "array", "items": { "type": "object" } },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replicaCount", "resources"],
+      "properties": {
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "resources": { "type": "object" },
+        "readinessProbe": { "type": "object" },
+        "livenessProbe": { "type": "object" },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
+        "podAnnotations": { "type": "object" },
+        "nodeSelector": { "type": "object" },
+        "tolerations": { "type": "array" },
+        "affinity": { "type": "object" },
+        "topologySpreadConstraints": { "type": "array" },
+        "extraEnv": { "type": "array" }
+      }
+    },
+    "service": { "type": "object" },
+    "ingress": { "type": "object" },
+    "autoscaling": { "type": "object" },
+    "podDisruptionBudget": { "type": "object" },
+    "networkPolicy": { "type": "object" },
+    "serviceAccount": { "type": "object" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outboundEnabled", "ruleAutomationEnabled", "jobLeaseSeconds", "allowSandbox"],
+      "properties": {
+        "outboundEnabled": { "type": "boolean" },
+        "ruleAutomationEnabled": { "type": "boolean" },
+        "jobLeaseSeconds": { "type": "string", "pattern": "^[0-9]+$" },
+        "allowSandbox": { "const": false, "description": "a released chart must never register the sandbox connector" }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imap", "gmail", "microsoftGraph"],
+      "properties": {
+        "imap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "port", "folder", "smtpPort", "smtpSendEnabled"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "folder": { "type": "string" },
+            "smtpHost": { "type": "string" },
+            "smtpPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "smtpSendEnabled": { "type": "boolean" }
+          }
+        },
+        "gmail": { "type": "object", "additionalProperties": false, "required": ["enabled"], "properties": { "enabled": { "type": "boolean" } } },
+        "microsoftGraph": { "type": "object", "additionalProperties": false, "required": ["enabled"], "properties": { "enabled": { "type": "boolean" } } }
+      }
+    },
+    "externalSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "keys"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "optionalKeys": { "type": "array", "items": { "type": "string" } },
+        "keys": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+        }
+      }
+    },
+    "podSecurityContext": { "type": "object" },
+    "containerSecurityContext": { "type": "object" }
+  }
+}

@@ -1,141 +1,90 @@
+{{- include "mailhub.validate" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "mailhub.fullname" . }}
+  labels:
+    {{- include "mailhub.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "mailhub.name" . }}
+      {{- include "mailhub.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ include "mailhub.name" . }}
+        {{- include "mailhub.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "mailhub.env" . | sha256sum }}
+        {{- with .Values.api.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
+      serviceAccountName: {{ include "mailhub.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: api
-          image: "{{ .Values.image.repository }}@{{ required \"values.image.digest must be an immutable release digest\" .Values.image.digest }}"
+          image: {{ include "mailhub.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8000
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
           env:
-            - name: PYTHONDONTWRITEBYTECODE
-              value: "1"
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: MAILHUB_ENV
-              value: production
-            - name: MAILHUB_ALLOW_SANDBOX
-              value: "false"
-            - name: MAILHUB_OUTBOUND_ENABLED
-              value: {{ .Values.outboundEnabled | quote }}
-            - name: MAILHUB_JOB_LEASE_SECONDS
-              value: {{ .Values.jobLeaseSeconds | quote }}
-            - name: MAILHUB_GMAIL_ENABLED
-              value: "false"
-            - name: MAILHUB_MICROSOFT_GRAPH_ENABLED
-              value: "false"
-            - name: MAILHUB_RULE_AUTOMATION_ENABLED
-              value: {{ .Values.ruleAutomationEnabled | quote }}
-            - name: MAILHUB_DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.databaseUrl }}
-            - name: MAILHUB_KMS_KEY_REF
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.kmsKeyRef }}
-            - name: MAILHUB_OBJECT_STORE_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.objectStoreEndpoint }}
-            - name: MAILHUB_AV_SCANNER_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.avScannerEndpoint }}
-            - name: MAILHUB_DLP_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.dlpEndpoint }}
-            - name: MAILHUB_CREDENTIAL_BROKER_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.credentialBrokerEndpoint }}
-            - name: MAILHUB_HOST_SERVICE_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.hostServiceToken }}
-            - name: MAILHUB_HOST_IDENTITY_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.hostIdentityEndpoint }}
-            - name: MAILHUB_APPROVAL_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.approvalEndpoint }}
-            - name: MAILHUB_AI_EXECUTION_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.aiExecutionEndpoint }}
-            - name: MAILHUB_HOST_ACTION_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.hostActionEndpoint }}
-            - name: MAILHUB_KNOWLEDGE_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.knowledgeEndpoint }}
-            - name: MAILHUB_AGENT_MEMORY_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.agentMemoryEndpoint }}
-            - name: MAILHUB_EVENT_PUBLISHER_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.eventPublisherEndpoint }}
-            - name: MAILHUB_TELEMETRY_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.telemetryEndpoint }}
-            - name: MAILHUB_QUOTA_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.quotaEndpoint }}
-            - name: MAILHUB_PROVIDER_SUBSCRIPTION_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.providerSubscriptionEndpoint }}
-            - name: MAILHUB_PROVIDER_NOTIFICATION_VERIFIER_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.providerNotificationVerifierEndpoint }}
-                  optional: true
-            - name: MAILHUB_KILL_SWITCH_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalSecret.name }}
-                  key: {{ .Values.externalSecret.keys.killSwitchEndpoint }}
+            {{- include "mailhub.env" . | nindent 12 }}
           readinessProbe:
-            httpGet: { path: /health/ready, port: http }
+            httpGet:
+              path: {{ .Values.api.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.readinessProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.api.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.livenessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
           securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

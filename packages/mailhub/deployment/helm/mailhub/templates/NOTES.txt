@@ -1,0 +1,25 @@
+MailHub {{ .Chart.AppVersion }} rendered for release "{{ .Release.Name }}".
+
+Before enabling production traffic:
+  1. Run the operator migration step against the release database:
+       python scripts/apply_migrations.py --direction upgrade
+     Migrations are never applied implicitly at API startup.
+  2. Confirm every Host Port endpoint in Secret {{ .Values.externalSecret.name | quote }} is reachable
+     from this namespace (the NetworkPolicy only allows DNS plus your egress list).
+  3. Keep runtime.outboundEnabled and runtime.ruleAutomationEnabled false until the
+     host approval, sender-interlock, kill-switch and provider gates are signed.
+
+Provider switches in this release:
+  IMAP/SMTP : {{ .Values.providers.imap.enabled }}
+  Gmail     : {{ .Values.providers.gmail.enabled }}
+  Graph     : {{ .Values.providers.microsoftGraph.enabled }}
+
+Explicit open item (MAIL-DIST-001 remainder):
+  This chart deploys the packaged API process only.  Durable sync, autonomy,
+  outbox and rule units are library entry points on MailWorker; scheduling and
+  process supervision belong to deployment infrastructure.  There is no
+  packaged worker/scheduler process, so no worker Deployment is templated here.
+  Deploy your own scheduler (or wait for a packaged entry point) rather than
+  inventing one in this chart.
+
+Service: {{ include "mailhub.fullname" . }}:{{ .Values.service.port }}

@@ -1,25 +1,113 @@
+# MailHub production values.  Every field is validated by values.schema.json;
+# unknown keys are rejected so a typo cannot silently disable a control.
+nameOverride: ""
+fullnameOverride: ""
+commonLabels: {}
+
 image:
   repository: registry.example.invalid/mailhub
-  # A release must replace this with an immutable digest. The placeholder is
-  # intentionally invalid so an unconfigured chart cannot be deployed.
+  # An immutable digest is mandatory.  values.schema.json enforces the
+  # sha256:<64 hex> shape, so a mutable tag can never be deployed.
   digest: ""
   pullPolicy: IfNotPresent
-replicaCount: 2
-# Keep outbound disabled until the host approval, sender interlock and
-# provider conformance gates are explicitly enabled by the release owner.
-outboundEnabled: false
-# Durable sync/autonomy/outbox worker lease in seconds; bounded by MailHub.
-jobLeaseSeconds: "300"
-# Independent L3A organize kill switch. Keep disabled until policy, quota,
-# host-action and incident-drill gates are approved.
-ruleAutomationEnabled: false
-# Required in any release that enables outbound or rule automation; the host
-# endpoint owns four-eyes switch changes and the authoritative audit ledger.
+imagePullSecrets: []
+
+api:
+  replicaCount: 2
+  # The image already runs as nobody (65534); the pod is pinned to match so a
+  # runAsUser drift cannot silently gain privileges.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  readinessProbe:
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  livenessProbe:
+    path: /health
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+  terminationGracePeriodSeconds: 30
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  topologySpreadConstraints: []
+  # Extra non-secret environment entries; secrets stay in the external Secret.
+  extraEnv: []
+
 service:
+  type: ClusterIP
   port: 8000
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  tls: []
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  # Empty selector means "pods in this namespace only".
+  ingressNamespaceSelector: {}
+  # Egress is deny-by-default; list the host endpoints the release needs.
+  egress: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Runtime behaviour switches.  Outbound sending and L3A rule automation stay
+# off until the host approval, sender interlock and provider gates are approved.
+runtime:
+  outboundEnabled: false
+  ruleAutomationEnabled: false
+  jobLeaseSeconds: "300"
+  allowSandbox: false
+
+# Provider switches.  The domestic path is IMAP/SMTP with an application
+# password; Gmail and Microsoft Graph stay off unless a release enables them.
+providers:
+  imap:
+    enabled: false
+    host: ""
+    port: 993
+    folder: INBOX
+    smtpHost: ""
+    smtpPort: 465
+    smtpSendEnabled: false
+  gmail:
+    enabled: false
+  microsoftGraph:
+    enabled: false
+
+# The Secret object is owned by the platform Secret Manager integration; this
+# chart only references it.  Keys map a logical name to the Secret key, and the
+# Secret key is also the environment variable name MailHub reads.
 externalSecret:
   name: mailhub-runtime
-  # The Secret object is owned by the platform Secret Manager integration.
+  optionalKeys: []
   keys:
     databaseUrl: MAILHUB_DATABASE_URL
     kmsKeyRef: MAILHUB_KMS_KEY_REF
@@ -40,3 +128,18 @@ externalSecret:
     providerSubscriptionEndpoint: MAILHUB_PROVIDER_SUBSCRIPTION_ENDPOINT
     providerNotificationVerifierEndpoint: MAILHUB_PROVIDER_NOTIFICATION_VERIFIER_ENDPOINT
     killSwitchEndpoint: MAILHUB_KILL_SWITCH_ENDPOINT
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
