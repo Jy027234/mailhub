@@ -301,6 +301,19 @@ def _folder_facts(client: imaplib.IMAP4_SSL, limit: int) -> dict[str, Any]:
     }
 
 
+def _tls_context(ca_file: Path | None) -> ssl.SSLContext:
+    """Trust anchor for the probe.
+
+    A self-hosted Dovecot or Exchange very often presents a private-CA
+    certificate, so the matrix must be able to record which anchor was used
+    instead of silently skipping those servers.
+    """
+
+    if ca_file is None:
+        return ssl.create_default_context()
+    return ssl.create_default_context(cafile=str(ca_file))
+
+
 def probe(
     *,
     host: str,
@@ -311,10 +324,11 @@ def probe(
     fetch_limit: int = 5,
     folder_limit: int = 30,
     timeout: float = 30.0,
+    ca_file: Path | None = None,
 ) -> dict[str, Any]:
     """Run the read-only probe and return a redacted evidence bundle."""
 
-    context = ssl.create_default_context()
+    context = _tls_context(ca_file)
     client = imaplib.IMAP4_SSL(host, port, ssl_context=context, timeout=timeout)
     try:
         tls = _tls_facts(client)
@@ -387,6 +401,9 @@ def probe(
             "tls_version": tls["tls_version"],
             "tls_cipher": tls["tls_cipher"],
             "peer_verified": tls["peer_verified"],
+            # Recorded so a reviewer knows whether the system trust store or an
+            # operator-supplied CA validated the server certificate.
+            "certificate_trust": "custom_ca" if ca_file is not None else "system_store",
             "capabilities": capabilities,
             "features": read_only,
             "inbox": {
@@ -422,6 +439,7 @@ def second_session_facts(
     password: str,
     mailbox: str = "INBOX",
     timeout: float = 30.0,
+    ca_file: Path | None = None,
 ) -> dict[str, int]:
     """Second session: proves UIDVALIDITY stability and re-measures visibility.
 
@@ -430,9 +448,7 @@ def second_session_facts(
     an anecdote into evidence.
     """
 
-    client = imaplib.IMAP4_SSL(
-        host, port, ssl_context=ssl.create_default_context(), timeout=timeout
-    )
+    client = imaplib.IMAP4_SSL(host, port, ssl_context=_tls_context(ca_file), timeout=timeout)
     try:
         client.login(username, password)
         status, data = client.status(mailbox, "(UIDVALIDITY UIDNEXT)")
@@ -469,6 +485,12 @@ def main() -> int:
     parser.add_argument("--validate", type=Path, default=None)
     parser.add_argument("--skip-reconnect", action="store_true")
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--ca-file",
+        type=Path,
+        default=None,
+        help="PEM trust anchor for a self-hosted server with a private CA",
+    )
     args = parser.parse_args()
 
     if args.validate is not None:
@@ -490,6 +512,7 @@ def main() -> int:
         password=settings["password"],
         mailbox=args.mailbox,
         timeout=args.timeout,
+        ca_file=args.ca_file,
     )
     bundle["label"] = args.label or settings["host"]
     if not args.skip_reconnect:
@@ -500,6 +523,7 @@ def main() -> int:
             password=settings["password"],
             mailbox=args.mailbox,
             timeout=args.timeout,
+            ca_file=args.ca_file,
         )
         inbox = bundle["inbox"]
         bundle["second_session"] = second

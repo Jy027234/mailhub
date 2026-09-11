@@ -1,0 +1,80 @@
+{
+  "capabilities": [
+    "AUTH=PLAIN",
+    "ENABLE",
+    "ID",
+    "IDLE",
+    "IMAP4REV1",
+    "LITERAL+",
+    "LOGIN-REFERRALS",
+    "SASL-IR"
+  ],
+  "certificate_trust": "custom_ca",
+  "exists_stable_across_sessions": true,
+  "features": {
+    "auth_login": false,
+    "auth_plain": true,
+    "auth_xoauth2": false,
+    "condstore": false,
+    "enable": true,
+    "idle": true,
+    "literal_plus": true,
+    "move": false,
+    "namespace": false,
+    "quota": false,
+    "special_use": false,
+    "starttls": false,
+    "uidplus": false,
+    "unselect": false,
+    "utf8_accept": false
+  },
+  "folders": {
+    "folder_count": 1,
+    "folder_name_digests": [
+      "83ecb521bf32"
+    ],
+    "folder_names_truncated": false,
+    "hierarchy_delimiter": ".",
+    "inbox_present": true
+  },
+  "host": "127.0.0.1",
+  "inbox": {
+    "mailbox": "INBOX",
+    "max_uid": 1,
+    "messages": 1,
+    "search_delta": 0,
+    "search_visibility_limited": false,
+    "uid_search_count": 1,
+    "uidnext": 2,
+    "uidvalidity": 1789136049,
+    "unseen": 1
+  },
+  "label": "dovecot-2.4-local",
+  "metadata_fetch": {
+    "fetched": 1,
+    "internal_date_samples": 1,
+    "requested": 1
+  },
+  "observed_at": "2026-09-11T14:14:21.603871+00:00",
+  "peer_verified": true,
+  "port": 10993,
+  "read_only_guard": {
+    "body_fetched": false,
+    "copy_or_move_issued": false,
+    "expunge_issued": false,
+    "flags_modified": false,
+    "selected_readonly": true,
+    "store_issued": false
+  },
+  "schema": "mailhub.imap_server_matrix_evidence.v1",
+  "second_session": {
+    "exists": 1,
+    "uid_search_count": 1,
+    "uidnext": 2,
+    "uidvalidity": 1789136049
+  },
+  "tls_cipher": "TLS_AES_256_GCM_SHA384",
+  "tls_version": "TLSv1.3",
+  "uid_search_stable_across_sessions": true,
+  "uidvalidity_stable_across_sessions": true
+}

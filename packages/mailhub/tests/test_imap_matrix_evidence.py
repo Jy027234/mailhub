@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import ssl
 from pathlib import Path
 from typing import Any
 
@@ -280,6 +281,25 @@ def test_probe_never_requests_a_body_section() -> None:
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             assert not node.value.startswith("BODY["), node.value
             assert "BODY.PEEK[" not in node.value, node.value
+
+
+def test_tls_context_defaults_to_the_system_store() -> None:
+    context = PROBE._tls_context(None)
+
+    assert context.verify_mode is not None
+    assert context.check_hostname is True
+
+
+def test_tls_context_accepts_an_operator_ca_for_self_hosted_servers(tmp_path: Path) -> None:
+    """A self-hosted Dovecot/Exchange very often presents a private-CA cert."""
+
+    ca = tmp_path / "ca.pem"
+    ca.write_text("not a real certificate", encoding="utf-8")
+
+    # load_verify_locations raises on a malformed file, which proves the path is
+    # actually consulted rather than silently ignored.
+    with pytest.raises(ssl.SSLError):
+        PROBE._tls_context(ca)
 
 
 def test_probe_selects_every_mailbox_read_only() -> None:

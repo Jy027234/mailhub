@@ -65,19 +65,26 @@ providers:
     evidence: [tests/test_connectors.py, local-host/scripts/b4_imap.py, local-host/scripts/b4_send.py, scripts/imap_server_matrix_probe.py, ../../docs/reports/mailhub-imap-server-matrix-2026-08-19.md]
     domestic_evidence: 网易企业邮箱 imap.qiye.163.com:993 真实只读切片（backfill 50 / 增量 0 重复 / 45 线程 / 50 分析 / 1 知识候选）+ smtp.qiye.163.com:465 受控发送闭环；属本地单用户证据，不替代服务器矩阵 / SMTP 对账。
     server_matrix:
-      verified: [163_qiye_enterprise, qq_mail]
-      still_open: [dovecot, self_hosted_exchange]
+      verified: [163_qiye_enterprise, qq_mail, dovecot_2_4_local]
+      still_open: [self_hosted_exchange]
       probe: scripts/imap_server_matrix_probe.py
+      local_fixture: scripts/local_dovecot_fixture.py
       evidence: ../../docs/reports/mailhub-imap-server-matrix-2026-08-19.md
       capability_divergence:
         note: 能力必须按服务器协商，任何写死都会在真实服务器上说谎
-        idle: {163_qiye_enterprise: false, qq_mail: true}
-        condstore: {163_qiye_enterprise: false, qq_mail: false}
-        uidplus: {163_qiye_enterprise: false, qq_mail: true}
-        move: {163_qiye_enterprise: false, qq_mail: true}
-        namespace: {163_qiye_enterprise: false, qq_mail: true}
-        quota: {163_qiye_enterprise: false, qq_mail: false}
-        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: true}
+        idle: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: true}
+        condstore: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
+        enable: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: true}
+        uidplus: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
+        move: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
+        namespace: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
+        quota: {163_qiye_enterprise: false, qq_mail: false, dovecot_2_4_local: false}
+        auth_xoauth2: {163_qiye_enterprise: false, qq_mail: true, dovecot_2_4_local: false}
+        hierarchy_delimiter: {163_qiye_enterprise: "/", qq_mail: "/", dovecot_2_4_local: "."}
+      capability_token_findings:
+        - dovecot_implements_uidplus_without_advertising_the_token
+        - dovecot_exposes_condstore_through_ENABLE_which_a_literal_token_check_misses
+        - hierarchy_delimiter_differs_per_server_never_assume_slash
     smtp_wire_evidence:
       harness: scripts/smtp_wire_conformance.py
       evidence: ../../docs/reports/mailhub-smtp-wire-conformance-2026-08-19.json
@@ -115,5 +122,5 @@ providers:
       - modseq_cursor_unavailable_on_both_verified_servers
       - smtp_002_still_open_for_real_provider_reconciliation
       - uidplus_absent_no_uid_expunge_on_163
-      - qq_dovecot_exchange_rows_still_open
+      - self_hosted_exchange_row_still_open
       - smtp_send_disabled_by_default

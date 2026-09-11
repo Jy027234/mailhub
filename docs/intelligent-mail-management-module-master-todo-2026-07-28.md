@@ -1485,7 +1485,15 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    `NAMESPACE`、`AUTH=XOAUTH2`** —— 与 163 形成相反对比（163 这些全部缺失）；`UIDVALIDITY=1789113608`、
    `UIDNEXT=max UID+1`、`EXISTS=UID SEARCH=324`、7 文件夹、分隔符 `/`、跨会话三项读数稳定。
    **结论：能力必须按服务器协商——把 `IDLE`/`UIDPLUS`/`MOVE` 写死会在真实服务器上说谎。**
-   Dovecot / 自建 Exchange 两行**仍开放**，故本条不勾选。
+   **2026-08-19 矩阵第 3 行实测（标准 Dovecot 2.4.5 本地夹具）**：新增
+   `packages/mailhub/scripts/local_dovecot_fixture.py`（私有 CA + Dovecot 2.4 配置 + Docker 启动命令），
+   探针新增 `--ca-file` 以支持私有 CA，并把信任锚（`custom_ca`/系统库）写入证据。
+   实测：TLSv1.3、8 项能力、`UIDVALIDITY=1789136049`、`UIDNEXT=max UID+1`、空邮箱与 `APPEND` 后
+   各采一次（1 封、`EXISTS=SEARCH=1`、元数据 FETCH 1/1）、跨会话稳定、分隔符 `.`。
+   **三个发现**：① Dovecot **实现了 UIDPLUS 却不广告令牌**（`APPEND` 返回 `[APPENDUID …]`）——
+   能力令牌不可作为唯一判据；② 广告 `ENABLE` 但不广告 `CONDSTORE`，而 `imap_smtp.py:206` 按字面令牌
+   判定 MODSEQ，**对 Dovecot 会漏判**（待改进项）；③ 层级分隔符是 `.` 而非 `/`，不可写死。
+   自建 Exchange 一行**仍开放**，故本条不勾选。
 - [ ] **MAIL-IMAP-006（P1/MH+SEC）**：为不支持 OAuth 的账号提供明确风险提示、最小权限应用密码、轮换和一键撤销。
 - [ ] **MAIL-SMTP-001（P1/MH）**：在 M9 后实现 SMTP draft/send adapter，支持 Message-ID/References/In-Reply-To 和 Provider 对账。
 - [ ] **MAIL-SMTP-002（P1/MH+SEC）**：实施 envelope recipient/header recipient 一致性、TLS、大小限制、域风险和防开放中继测试。
