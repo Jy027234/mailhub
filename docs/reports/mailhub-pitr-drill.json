@@ -1,0 +1,63 @@
+{
+  "schema": "mailhub.pitr_drill.v1",
+  "recorded_at": "2026-09-11T19:33:02.578332+00:00",
+  "image": "postgres:16.4-alpine",
+  "archive_dir": "/pitr/archive",
+  "backup_dir": "/pitr/base",
+  "recovery_target_time": "2026-09-11 19:32:58.695795+00",
+  "archived_wal_segments": 5,
+  "checks": [
+    {
+      "name": "container_ready",
+      "ok": true,
+      "detail": "postgres:16.4-alpine"
+    },
+    {
+      "name": "archive_mode_enabled",
+      "ok": true,
+      "detail": "archive_mode=on"
+    },
+    {
+      "name": "base_backup_taken",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "wal_segments_archived",
+      "ok": true,
+      "detail": "5 files in /pitr/archive"
+    },
+    {
+      "name": "recovery_completed",
+      "ok": true,
+      "detail": "cluster answers on port 5433"
+    },
+    {
+      "name": "write_before_target_recovered",
+      "ok": true,
+      "detail": "rows with note=before-target: 1"
+    },
+    {
+      "name": "write_after_target_excluded",
+      "ok": true,
+      "detail": "rows with note=after-target: 0"
+    },
+    {
+      "name": "recovery_is_point_in_time",
+      "ok": true,
+      "detail": "total rows in the restored cluster: 1"
+    },
+    {
+      "name": "recovery_restored_from_archive",
+      "ok": true,
+      "detail": "4 WAL files restored from /pitr/archive"
+    },
+    {
+      "name": "recovery_stopped_at_target",
+      "ok": true,
+      "detail": "log records an explicit stop at the target time"
+    }
+  ],
+  "failures": [],
+  "passed": true
+}

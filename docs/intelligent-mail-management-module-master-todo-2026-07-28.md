@@ -1527,7 +1527,18 @@ Broker 和隔离账号完成。实施后运行本批验证，更新本待办但�
    迁移窗口回滚到 0016（账本与 0020 的 `cc_addresses` 同步消失）后再升级复原。
    本次还修掉一个**会导致误判的缺陷**：账本存的是文件名词干，按字符串比较会把 `0016_x > 0016`，
    从而把回滚目标自身排除在期望集合外——已改为按数字前缀比较并加回归测试。
-   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。PITR/WAL 归档、备库切换、容量压测与真实故障注入仍开放。
+   证据 `docs/reports/mailhub-dr-drill-2026-08-19.json`。备库切换、容量压测与真实故障注入仍开放。
+   **2026-09-11 PITR/WAL 归档已闭环**：新增 `packages/mailhub/scripts/pitr_drill.py`（真实 `postgres:16.4-alpine`，
+   全程在容器内完成以避开 Windows 挂载数据目录的坑）。流程：开 `archive_mode=on` + `archive_command` 并重启 →
+   `pg_basebackup -Fp -Xs -R` 取基线 → 写 `before-target` 行 → **等 1.2s 后取 `clock_timestamp()` 作为恢复目标**
+   （边界必须无歧义）→ 写 `after-target` 行 → 切 WAL 段 → 把 `standby.signal` 换成 `recovery.signal`、
+   追加 `restore_command`/`recovery_target_time`/`recovery_target_action='promote'` → 用 `pg_ctl` 在 5433 端口拉起恢复库。
+   **10/10 通过**：归档 5 个 WAL 段、**4 个 WAL 文件确实从归档恢复**（日志 `restored log file` 计数，而非只看配置）、
+   日志有明确的 `recovery stopping before commit of transaction …`、目标前写入**存在**、**目标后写入不存在**、
+   恢复库总行数为 1（证明是"停在某时刻"而非"全有或全无"）。证据 `docs/reports/mailhub-pitr-drill.json`，
+   离线 `--validate` 通过，8 项证据契约测试（含"缺了目标后写入这条检查就必须判失败"——否则只能证明恢复了，
+   证明不了是按时间点恢复）。演练目录以 root 创建后移交 postgres、`pg_basebackup` 目标目录补 `chmod 700`
+   （Postgres 拒绝 0750 以上的数据目录权限），两处都是实测踩到后修的。
    **2026-09-11 四眼审批接口落地（加法式，方案 A）**：查证发现该语义缺失于**实现**而非文档——
    `ports.py` 的 `ApprovalPort.verify_confirmation` 无审批人身份参数；一致性套件不检查职责分离与重放；
    `local-host/stores.py::verify_approval` 有 fail-open 旁路（绑定字段为空时对任意 action 返回 True）
